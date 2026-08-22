@@ -1,0 +1,6 @@
+[bandit]
+# CI runs bandit on vault/ (Trevor's vault.yml). Tests use pytest asserts,
+# which bandit flags as B101 — scan production code only. Bandit >= 1.8 does
+# not auto-read this file: pass it explicitly (bandit -r vault --ini
+# vault/.bandit) or use the equivalent CLI flag (bandit -r vault -x "*/tests/*").
+exclude: */tests/*
