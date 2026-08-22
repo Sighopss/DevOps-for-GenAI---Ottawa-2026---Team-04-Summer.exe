@@ -39,11 +39,36 @@ resource "aws_cognito_user_pool_client" "web" {
 
   generate_secret                      = false
   allowed_oauth_flows_user_pool_client = true
-  allowed_oauth_flows                  = ["code"]
-  allowed_oauth_scopes                 = ["openid", "email", "profile"]
-  supported_identity_providers         = ["COGNITO"]
-  callback_urls                        = [local.web_origin]
-  logout_urls                          = [local.web_origin]
+
+  # The Explorer is a static export with no server to hold a client secret, so
+  # it uses the implicit flow: it requests `response_type=token` and reads the
+  # ID token out of the URL fragment (`web/src/lib/cognito.ts`). The client was
+  # configured for `code` only, so the hosted UI rejected every sign-in with
+  # "An error was encountered with the requested page". Flows must match the
+  # client that uses them.
+  #
+  # Implicit puts the token in the URL fragment, which is weaker than code +
+  # PKCE. Accepted for a 48h demo with two seeded tenants and a 7-day TTL;
+  # the durable fix is PKCE in the web app, which is a `web/` change.
+  allowed_oauth_flows          = ["implicit"]
+  allowed_oauth_scopes         = ["openid", "email", "profile"]
+  supported_identity_providers = ["COGNITO"]
+
+  # The app sends `redirect_uri = <origin>/explorer` (page.tsx) — no trailing
+  # slash. An unregistered redirect_uri is the second reason sign-in failed:
+  # Cognito matches these strings exactly, so `/explorer/` and `/explorer` are
+  # different entries. All three forms are registered so the hosted UI accepts
+  # the redirect whichever way the app or a hand-typed link spells it.
+  callback_urls = [
+    local.web_origin,
+    "${local.web_origin}/explorer",
+    "${local.web_origin}/explorer/",
+  ]
+  logout_urls = [
+    local.web_origin,
+    "${local.web_origin}/explorer",
+    "${local.web_origin}/explorer/",
+  ]
   prevent_user_existence_errors        = "ENABLED"
   explicit_auth_flows = [
     "ALLOW_USER_PASSWORD_AUTH",
