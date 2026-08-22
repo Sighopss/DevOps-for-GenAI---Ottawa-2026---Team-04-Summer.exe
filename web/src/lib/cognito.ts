@@ -1,3 +1,5 @@
+import type { TenantId } from "@/lib/types";
+
 const hostedUiConfig = {
   region: process.env.NEXT_PUBLIC_COGNITO_REGION,
   userPoolId: process.env.NEXT_PUBLIC_COGNITO_USER_POOL_ID,
@@ -7,6 +9,11 @@ const hostedUiConfig = {
 
 export const ID_TOKEN_STORAGE_KEY = "tracevault.id_token";
 export const TENANT_STORAGE_KEY = "tracevault.tenant";
+
+type StoredIdentity = {
+  tenantId: TenantId | null;
+  username: string | null;
+};
 
 export function hasHostedUiConfig(): boolean {
   return Boolean(
@@ -35,6 +42,14 @@ export function buildHostedUiUrl(redirectUri: string): string {
   return url.toString();
 }
 
+export function readStoredIdToken(): string | null {
+  if (typeof window === "undefined") {
+    return null;
+  }
+
+  return window.sessionStorage.getItem(ID_TOKEN_STORAGE_KEY);
+}
+
 export function persistIdTokenFromHash(): void {
   if (typeof window === "undefined") {
     return;
@@ -56,4 +71,39 @@ export function persistIdTokenFromHash(): void {
     "",
     `${window.location.pathname}${window.location.search}`,
   );
+}
+
+function decodeBase64Url(segment: string): string {
+  const normalized = segment.replace(/-/g, "+").replace(/_/g, "/");
+  const padded = normalized.padEnd(Math.ceil(normalized.length / 4) * 4, "=");
+  return window.atob(padded);
+}
+
+export function readIdTokenIdentity(idToken: string | null): StoredIdentity {
+  if (!idToken || typeof window === "undefined") {
+    return { tenantId: null, username: null };
+  }
+
+  try {
+    const [, payload] = idToken.split(".");
+    if (!payload) {
+      return { tenantId: null, username: null };
+    }
+
+    const parsed = JSON.parse(decodeBase64Url(payload)) as {
+      "custom:tenant_id"?: string;
+      "cognito:username"?: string;
+      username?: string;
+    };
+
+    return {
+      tenantId:
+        parsed["custom:tenant_id"] === "tenant-a" || parsed["custom:tenant_id"] === "tenant-b"
+          ? parsed["custom:tenant_id"]
+          : null,
+      username: parsed["cognito:username"] ?? parsed.username ?? null,
+    };
+  } catch {
+    return { tenantId: null, username: null };
+  }
 }

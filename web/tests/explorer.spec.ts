@@ -1,5 +1,20 @@
 import { expect, test } from "@playwright/test";
 
+function buildIdToken(tenant: "tenant-a" | "tenant-b"): string {
+  const encode = (value: object) =>
+    Buffer.from(JSON.stringify(value)).toString("base64url");
+
+  return [
+    encode({ alg: "none", typ: "JWT" }),
+    encode({
+      "custom:tenant_id": tenant,
+      "cognito:username": tenant,
+      sub: `${tenant}-sub`,
+    }),
+    "signature",
+  ].join(".");
+}
+
 test("fixture A renders the explorer flow", async ({ page }) => {
   await page.goto("/explorer");
 
@@ -18,12 +33,15 @@ test("fixture A renders the explorer flow", async ({ page }) => {
     }),
   ).toBeVisible();
   await expect(page.getByText("REDACTED")).toBeVisible();
+  await expect(page.getByText("Day 1 fixture only")).toBeVisible();
 });
 
 test("fixture screens show masked placeholders instead of raw SSN or email", async ({
   page,
 }) => {
   await page.goto("/explorer");
+  await page.getByLabel("Tenant").selectOption("tenant-b");
+  await expect(page.getByLabel("Tenant")).toHaveValue("tenant-b");
 
   const text = await page.locator("body").innerText();
 
@@ -31,17 +49,63 @@ test("fixture screens show masked placeholders instead of raw SSN or email", asy
   expect(text).toContain("[SSN]");
   expect(text).not.toMatch(/\b\d{3}-\d{2}-\d{4}\b/);
   expect(text).not.toMatch(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/i);
+  await expect(page.getByText("Locked contract example:", { exact: false })).toBeVisible();
 });
 
-test("tenant-b sees contracted 403 chrome, not a blank detail view", async ({
+test("live tenant-b sees 403 chrome from the read API, not a blank detail view", async ({
   page,
 }) => {
-  await page.goto("/explorer");
-  await page.getByLabel("Tenant").selectOption("tenant-b");
+  const traceA = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
+  const traceB = "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb";
 
-  await expect(page.getByText("403 forbidden")).toBeVisible();
-  await expect(page.getByText("tenant mismatch")).toBeVisible();
-  await expect(page.getByText("No flights for tenant-b.")).toBeVisible();
+  await page.addInitScript((token) => {
+    window.sessionStorage.setItem("tracevault.id_token", token);
+    window.sessionStorage.setItem("tracevault.tenant", "tenant-b");
+  }, buildIdToken("tenant-b"));
+
+  await page.route("http://127.0.0.1:4010/v1/traces?limit=50", async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        flights: [
+          {
+            trace_id: traceB,
+            tenant_id: "tenant-b",
+            start_time: "2026-08-18T18:01:00.000Z",
+            end_time: "2026-08-18T18:01:00.900Z",
+            cost_usd: 0.0021,
+            status: "ok",
+            prompt_preview: "User [EMAIL] asked about [SSN]",
+          },
+        ],
+      }),
+    });
+  });
+
+  await page.route(`http://127.0.0.1:4010/v1/traces/${traceA}`, async (route) => {
+    await route.fulfill({
+      status: 403,
+      contentType: "application/json",
+      body: JSON.stringify({
+        error: {
+          code: "forbidden",
+          message: "tenant mismatch",
+        },
+      }),
+    });
+  });
+
+  await page.goto(`/explorer?trace_id=${traceA}`);
+
+  await expect(page.getByText("Live read active")).toBeVisible();
+  await expect(
+    page.getByRole("heading", { name: "403 forbidden: tenant mismatch" }),
+  ).toBeVisible();
+  await expect(page.locator(".forbidden-copy")).toHaveText("forbidden: tenant mismatch");
+  await expect(
+    page.getByText("Live reads follow the signed-in ID token for tenant-b."),
+  ).toBeVisible();
 
   const text = await page.locator("body").innerText();
   expect(text).not.toMatch(/\b\d{3}-\d{2}-\d{4}\b/);

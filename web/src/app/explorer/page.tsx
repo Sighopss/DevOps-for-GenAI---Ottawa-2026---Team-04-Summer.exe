@@ -1,24 +1,17 @@
 import { Suspense } from "react";
 import { ExplorerShell, ExplorerShellFallback } from "@/components/explorer-shell";
-import { loadFixtureFlight, loadForbiddenFixture } from "@/lib/fixture";
-import { summarizeFlight } from "@/lib/flight";
+import { loadFixtureData } from "@/lib/fixture";
 
 export default function ExplorerPage() {
-  const flight = loadFixtureFlight();
-  const forbidden = loadForbiddenFixture();
-  const summary = summarizeFlight(flight.spans);
+  const fixtures = loadFixtureData();
 
   return (
     <Suspense
       fallback={
-        <ExplorerShellFallback
-          flight={flight}
-          forbidden={forbidden}
-          summary={summary}
-        />
+        <ExplorerShellFallback fixtures={fixtures} />
       }
     >
-      <ExplorerShell flight={flight} forbidden={forbidden} summary={summary} />
+      <ExplorerShell fixtures={fixtures} />
     </Suspense>
   );
 }

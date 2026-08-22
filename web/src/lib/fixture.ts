@@ -1,44 +1,62 @@
 import fs from "node:fs";
 import path from "node:path";
-import type { FlightFixture, ForbiddenFixture, TraceSpan } from "@/lib/types";
+import {
+  flightListItemFromSpans,
+  withDurations,
+} from "@/lib/flight";
+import type {
+  FixtureDataset,
+  FlightDetail,
+  ForbiddenFixture,
+  TenantId,
+  TraceSpanRecord,
+} from "@/lib/types";
 
-function withDurations(spans: Omit<TraceSpan, "durationMs">[]): TraceSpan[] {
-  return spans.map((span) => {
-    const start = new Date(span.start_time).getTime();
-    const end = new Date(span.end_time).getTime();
-
-    return {
-      ...span,
-      durationMs: Math.max(end - start, 0),
-    };
-  });
+function readFixtureJson<T>(filename: string): T {
+  const fixturePath = path.join(process.cwd(), "..", "contracts", "fixtures", filename);
+  return JSON.parse(fs.readFileSync(fixturePath, "utf-8")) as T;
 }
 
-export function loadFixtureFlight(): FlightFixture {
-  const fixturePath = path.join(
-    process.cwd(),
-    "..",
-    "contracts",
-    "fixtures",
-    "tenant-a-rag.json",
-  );
-  const raw = fs.readFileSync(fixturePath, "utf-8");
-  const parsed = JSON.parse(raw) as { spans: Omit<TraceSpan, "durationMs">[] };
+function detailFromSpans(spans: ReturnType<typeof withDurations>): FlightDetail {
+  const root = spans[0];
 
   return {
-    spans: withDurations(parsed.spans),
+    trace_id: root.trace_id,
+    tenant_id: root.tenant_id,
+    expires_at: null,
+    spans,
   };
 }
 
-export function loadForbiddenFixture(): ForbiddenFixture {
-  const fixturePath = path.join(
-    process.cwd(),
-    "..",
-    "contracts",
-    "fixtures",
+export function loadFixtureData(): FixtureDataset {
+  const tenantA = readFixtureJson<{ spans: TraceSpanRecord[] }>("tenant-a-rag.json");
+  const tenantB = readFixtureJson<Omit<ForbiddenFixture, "spans"> & { spans: TraceSpanRecord[] }>(
     "tenant-b-forbidden.json",
   );
-  const raw = fs.readFileSync(fixturePath, "utf-8");
+  const tenantASpans = withDurations(tenantA.spans);
+  const tenantBSpans = withDurations(tenantB.spans);
+  const tenantADetail = detailFromSpans(tenantASpans);
+  const tenantBDetail = detailFromSpans(tenantBSpans);
 
-  return JSON.parse(raw) as ForbiddenFixture;
+  return {
+    flightsByTenant: {
+      "tenant-a": [flightListItemFromSpans(tenantASpans)],
+      "tenant-b": [flightListItemFromSpans(tenantBSpans)],
+    },
+    detailsByTenant: {
+      "tenant-a": { [tenantADetail.trace_id]: tenantADetail },
+      "tenant-b": { [tenantBDetail.trace_id]: tenantBDetail },
+    },
+    forbidden: {
+      ...tenantB,
+      spans: tenantBSpans,
+    },
+  };
+}
+
+export function getFixtureDefaultTraceId(
+  fixtures: FixtureDataset,
+  tenantId: TenantId,
+): string | null {
+  return fixtures.flightsByTenant[tenantId][0]?.trace_id ?? null;
 }
