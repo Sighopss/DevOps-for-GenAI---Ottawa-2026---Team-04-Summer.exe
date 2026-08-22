@@ -21,6 +21,16 @@ FAKE_INPUT_TOKENS = 1
 FAKE_OUTPUT_TOKENS = 1
 FAKE_COST_USD = 0.0
 
+# Agreed product models (must stay in infra `bedrock_model_ids` IAM allowlist).
+DEFAULT_CONVERSE_MODEL_ID = "amazon.nova-lite-v1:0"
+DEFAULT_EMBED_MODEL_ID = "amazon.titan-embed-text-v2:0"
+ALLOWED_CONVERSE_MODEL_IDS = frozenset(
+    {
+        "anthropic.claude-3-5-sonnet-20241022-v2:0",
+        DEFAULT_CONVERSE_MODEL_ID,
+    }
+)
+
 
 @dataclass
 class ConverseResult:
@@ -39,14 +49,14 @@ def embed_texts(texts: list[str]) -> list[list[float]]:
     if fake_bedrock_enabled():
         return [_fake_embed(text) for text in texts]
     client = _runtime_client()
-    model = os.environ.get("BEDROCK_EMBED_MODEL_ID", "").strip()
-    if not model:
-        raise RuntimeError("BEDROCK_EMBED_MODEL_ID is required unless TRACEVAULT_FAKE_BEDROCK=1")
+    model = os.environ.get("BEDROCK_EMBED_MODEL_ID", "").strip() or DEFAULT_EMBED_MODEL_ID
     return [_invoke_embed(client, model, text) for text in texts]
 
 
 def converse(*, question: str, context: str) -> ConverseResult:
-    model = os.environ.get("BEDROCK_MODEL_ID", "").strip() or "fake-bedrock"
+    model = os.environ.get("BEDROCK_MODEL_ID", "").strip() or (
+        "fake-bedrock" if fake_bedrock_enabled() else DEFAULT_CONVERSE_MODEL_ID
+    )
     if fake_bedrock_enabled():
         return ConverseResult(
             text=_fake_answer(context),
@@ -55,8 +65,11 @@ def converse(*, question: str, context: str) -> ConverseResult:
             output_tokens=FAKE_OUTPUT_TOKENS,
             cost_usd=FAKE_COST_USD,
         )
-    if not os.environ.get("BEDROCK_MODEL_ID", "").strip():
-        raise RuntimeError("BEDROCK_MODEL_ID is required unless TRACEVAULT_FAKE_BEDROCK=1")
+    if model not in ALLOWED_CONVERSE_MODEL_IDS:
+        raise RuntimeError(
+            f"BEDROCK_MODEL_ID={model!r} is not in the agreed allowlist "
+            f"{sorted(ALLOWED_CONVERSE_MODEL_IDS)}"
+        )
     client = _runtime_client()
     response = client.converse(
         modelId=model,

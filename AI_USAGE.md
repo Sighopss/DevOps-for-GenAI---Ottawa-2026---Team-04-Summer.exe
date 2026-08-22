@@ -26,9 +26,9 @@ Verifiable from this repo without taking anyone's word for it: every feature bra
 | Model family | Claude **or** Nova (whichever is enabled on the account) |
 | Region | `us-east-1` |
 | Permitted model ids | `anthropic.claude-3-5-sonnet-20241022-v2:0`, `amazon.nova-lite-v1:0` — both allowed simultaneously so the second is a fallback |
-| Exact deployed id | **TBD** — nothing is deployed, so no id has been *used* yet. Recorded here once an apply fixes it |
-| Embedding model | `BEDROCK_EMBED_MODEL_ID` — **not yet pinned, and not yet in the IAM allowlist.** See the gap recorded in [`docs/AI_INVENTORY.md`](docs/AI_INVENTORY.md) |
-| Where the id is configured | `infra/envs/*.tfvars` (`bedrock_model_ids`) and the `BEDROCK_MODEL_ID` environment variable read by `demo-app/`. Never hardcoded in application code |
+| Exact deployed id | Default live converse model: `amazon.nova-lite-v1:0`. Override with `BEDROCK_MODEL_ID=anthropic.claude-3-5-sonnet-20241022-v2:0`. Both are on the IAM allowlist after apply. |
+| Embedding model | `amazon.titan-embed-text-v2:0` (pinned in `bedrock_model_ids` and `DEFAULT_EMBED_MODEL_ID`) |
+| Where the id is configured | `infra/envs/*.tfvars` (`bedrock_model_ids`) and `BEDROCK_MODEL_ID` / `BEDROCK_EMBED_MODEL_ID` in `demo-app/` (defaults to Nova Lite + Titan Embed V2). Never hardcoded secrets — only model ids. |
 | Key inference settings | `maxTokens` 256, `temperature` 0, one attempt (no retries), 30 s read timeout |
 | What it is used for | One LLM answer per demo flight, over a small local corpus retrieved by a single read-only RAG tool |
 | Faking it | `TRACEVAULT_FAKE_BEDROCK=1` makes the demo return a canned response instead of calling Bedrock. **Every test in this repo runs this way.** If the demo is run that way, say so out loud — see **Demo integrity (P-15)** in the README |

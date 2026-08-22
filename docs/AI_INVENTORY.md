@@ -20,7 +20,7 @@ This file is the **AI** supply chain: which model, which version, which embeddin
 | Region | `us-east-1` (`AWS_REGION`, defaults to `us-east-1` in `demo-app/src/demo_app/bedrock.py`) |
 | Permitted model ids | `anthropic.claude-3-5-sonnet-20241022-v2:0`<br/>`amazon.nova-lite-v1:0` |
 | Where pinned | `bedrock_model_ids` in `infra/variables.tf` (default) and `infra/envs/{dev,prod}.tfvars` |
-| Runtime selection | `BEDROCK_MODEL_ID` environment variable. Required unless `TRACEVAULT_FAKE_BEDROCK=1`; the code raises rather than silently picking a default. |
+| Runtime selection | `BEDROCK_MODEL_ID` environment variable. Defaults to `amazon.nova-lite-v1:0` when unset; override to Claude for the other agreed converse model. Rejects any id outside the allowlist. |
 | API | `bedrock-runtime` `Converse` |
 | Authorisation | IAM `bedrock:InvokeModel` + `bedrock:InvokeModelWithResponseStream`, scoped to exactly these model ARNs plus the matching inference-profile ARNs. Never `*`. See `infra/oidc.tf` → `BedrockInvokeScoped`, built from `local.bedrock_model_arns` in `infra/main.tf`. |
 | Version pinning | Both ids carry explicit versions (`-v2:0`, `-v1:0`). Neither is an alias or a latest-tag. |
@@ -44,15 +44,13 @@ The system instruction is a single line, corpus-grounding only: the question, th
 | | |
 |---|---|
 | Provider | Amazon Bedrock, same region |
-| Model id | **Not pinned.** Supplied at runtime via `BEDROCK_EMBED_MODEL_ID`; required unless `TRACEVAULT_FAKE_BEDROCK=1`. |
+| Model id | `amazon.titan-embed-text-v2:0` (pinned) |
+| Where pinned | Same `bedrock_model_ids` list as converse (IAM allowlist) and `DEFAULT_EMBED_MODEL_ID` in `demo-app/src/demo_app/bedrock.py` |
+| Runtime selection | `BEDROCK_EMBED_MODEL_ID` environment variable; defaults to Titan Embed V2 when unset |
 | API | `bedrock-runtime` `InvokeModel`, body `{"inputText": ...}`, expecting `{"embedding": [...]}` — the Amazon Titan embeddings request/response shape |
 | Used for | Embedding the question and the three corpus documents, then cosine similarity to pick top-2 (`RETRIEVE_TOP_K = 2` in `demo-app/src/demo_app/rag.py`) |
 
-> **Gap found while compiling this inventory.** `bedrock_model_ids` contains only the two **converse** models. The IAM policy that authorises Bedrock is generated from that same list, so **no embedding model is in the allowlist** — a live run with `TRACEVAULT_FAKE_BEDROCK` unset would fail the RAG step with `AccessDeniedException`. The `bedrock:InvokeModel` *action* is granted; the embedding model *resource* is not.
->
-> This is precisely the class of defect an inventory exercise is supposed to surface: the embedding model was never named, so it was never authorised. Fix is to pin an id (e.g. `amazon.titan-embed-text-v2:0`) and add it to `bedrock_model_ids` so the policy picks it up. Owner: Trevor. Tracked on issue #43.
->
-> It has not been hit yet because every test and every local run so far has used `TRACEVAULT_FAKE_BEDROCK=1`, which bypasses both Bedrock calls.
+> **Closed gap.** Titan Embed V2 is now on the IAM allowlist with the two converse models. A live run without `TRACEVAULT_FAKE_BEDROCK` uses Nova Lite (default) or Claude 3.5 Sonnet for Converse, and Titan Embed V2 for RAG. Account-level Bedrock model access must still be enabled in the AWS console for those three ids, and the next `terraform apply` must land so the OIDC role picks up the new ARN.
 
 ### Fake mode — disclosed stub
 
@@ -129,4 +127,4 @@ Both lockfiles (`sdk/uv.lock`, `demo-app/uv.lock`) are committed for reproducibi
 | Is anything sent to a third party? | No. AWS services in our own account only |
 | What if the model provider is down? | Second permitted model id, or the disclosed fake mode. The vault is unaffected — it makes no model calls. |
 
-**Recorded gaps:** the embedding model is unpinned and unauthorised (above); the live converse path hardcodes `cost_usd = 0.0`, so real spend is not yet computed per span. Both owned by Trevor.
+**Recorded gaps:** the live converse path hardcodes `cost_usd = 0.0`, so real spend is not yet computed per span (Trevor). The embedding IAM gap is closed — Titan Embed V2 is on `bedrock_model_ids`.

@@ -115,3 +115,45 @@ def test_bedrock_timeout_retry_and_token_budgets(
     assert config.connect_timeout == bedrock.CONNECT_TIMEOUT_S == 5
     assert config.read_timeout == bedrock.READ_TIMEOUT_S == 30
     assert config.retries["max_attempts"] == 1
+
+
+def test_converse_rejects_model_outside_allowlist(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.delenv("TRACEVAULT_FAKE_BEDROCK", raising=False)
+    monkeypatch.setenv("BEDROCK_MODEL_ID", "amazon.titan-text-express-v1")
+    with pytest.raises(RuntimeError, match="not in the agreed allowlist"):
+        bedrock.converse(question="q", context="c")
+
+
+def test_live_defaults_are_agreed_models(monkeypatch: pytest.MonkeyPatch) -> None:
+    captured: dict[str, Any] = {}
+
+    class Client:
+        def converse(self, **kwargs: Any) -> dict[str, Any]:
+            captured["modelId"] = kwargs["modelId"]
+            return {
+                "output": {"message": {"content": [{"text": "ok"}]}},
+                "usage": {"inputTokens": 1, "outputTokens": 1},
+            }
+
+        def invoke_model(self, **kwargs: Any) -> dict[str, Any]:
+            captured["embedModelId"] = kwargs["modelId"]
+
+            class Body:
+                def read(self) -> bytes:
+                    return b'{"embedding":[0.1,0.2]}'
+
+            return {"body": Body()}
+
+    monkeypatch.delenv("TRACEVAULT_FAKE_BEDROCK", raising=False)
+    monkeypatch.delenv("BEDROCK_MODEL_ID", raising=False)
+    monkeypatch.delenv("BEDROCK_EMBED_MODEL_ID", raising=False)
+    monkeypatch.setattr(bedrock.boto3, "client", lambda *_a, **_k: Client())
+
+    result = bedrock.converse(question="q", context="c")
+    vectors = bedrock.embed_texts(["hello"])
+    assert result.model == bedrock.DEFAULT_CONVERSE_MODEL_ID
+    assert captured["modelId"] == bedrock.DEFAULT_CONVERSE_MODEL_ID
+    assert captured["embedModelId"] == bedrock.DEFAULT_EMBED_MODEL_ID
+    assert vectors == [[0.1, 0.2]]

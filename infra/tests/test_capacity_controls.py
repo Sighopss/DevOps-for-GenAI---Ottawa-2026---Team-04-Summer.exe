@@ -53,6 +53,24 @@ class CapacityControlsTests(unittest.TestCase):
         self.assertIn('retries={"max_attempts": 1}', bedrock)
         self.assertIn('"maxTokens": MAX_OUTPUT_TOKENS', bedrock)
 
+    def test_agreed_bedrock_models_are_allowlisted(self) -> None:
+        required = (
+            "anthropic.claude-3-5-sonnet-20241022-v2:0",
+            "amazon.nova-lite-v1:0",
+            "amazon.titan-embed-text-v2:0",
+        )
+        for relative in (
+            "infra/variables.tf",
+            "infra/envs/dev.tfvars.example",
+            "infra/envs/prod.tfvars.example",
+        ):
+            text = _text(relative)
+            for model_id in required:
+                self.assertIn(model_id, text, msg=relative)
+        bedrock = _text("demo-app/src/demo_app/bedrock.py")
+        self.assertIn('DEFAULT_CONVERSE_MODEL_ID = "amazon.nova-lite-v1:0"', bedrock)
+        self.assertIn('DEFAULT_EMBED_MODEL_ID = "amazon.titan-embed-text-v2:0"', bedrock)
+
     def test_limit_behavior_is_documented(self) -> None:
         scale = _text("docs/SCALE.md")
         for evidence in ("100 flights/minute", "429 Too Many Requests", "30 seconds", "< $0.01"):

@@ -91,7 +91,7 @@ Full inventory, including versions and inference settings, is in [`docs/AI_INVEN
 | Converse models permitted | `anthropic.claude-3-5-sonnet-20241022-v2:0`, `amazon.nova-lite-v1:0` |
 | Traceability | `bedrock_model_ids` in `infra/envs/*.tfvars`; `BEDROCK_MODEL_ID` at runtime. IAM scopes `bedrock:InvokeModel` to exactly those ARNs, never `*`. |
 | Key settings | `maxTokens` 256, `temperature` 0, `retries.max_attempts` 1, read timeout 30 s |
-| Embeddings | `BEDROCK_EMBED_MODEL_ID` — **not yet pinned**, and not present in the IAM allowlist. See the gap in `docs/AI_INVENTORY.md`. |
+| Embeddings | `amazon.titan-embed-text-v2:0` — pinned in `bedrock_model_ids` and demo-app defaults. |
 | Fake mode | `TRACEVAULT_FAKE_BEDROCK=1` replaces both calls with deterministic local stubs. Disclosed under P-15 whenever used in a demo. |
 | Model weights | None vendored. Nothing self-hosted. Nothing fine-tuned. |
 
