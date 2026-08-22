@@ -52,7 +52,7 @@ resource "aws_cognito_user_pool_client" "web" {
     local.web_origin,
     "${local.web_origin}/explorer/",
   ]
-  prevent_user_existence_errors        = "ENABLED"
+  prevent_user_existence_errors = "ENABLED"
   explicit_auth_flows = [
     "ALLOW_USER_PASSWORD_AUTH",
     "ALLOW_USER_SRP_AUTH",
