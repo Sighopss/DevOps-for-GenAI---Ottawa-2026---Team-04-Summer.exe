@@ -38,9 +38,11 @@ class FakeS3Client:
 class FakeTable:
     """Mimics a boto3 DynamoDB Table resource (put_item / get_item)."""
 
-    def __init__(self, fail=False):
+    def __init__(self, fail=False, page_size=None):
         self.items: dict[tuple[str, str], dict] = {}
         self.fail = fail
+        self.page_size = page_size  # None = single page (legacy behaviour)
+        self.query_calls = 0
 
     def put_item(self, Item):
         if self.fail:
@@ -52,9 +54,14 @@ class FakeTable:
         item = self.items.get((Key["tenant_id"], Key["trace_id"]))
         return {"Item": item} if item is not None else {}
 
-    def query(self, KeyConditionExpression, ExpressionAttributeValues, **kwargs):
+    def query(self, KeyConditionExpression, ExpressionAttributeValues,
+              ExclusiveStartKey=None, **kwargs):
         """Supports the one expression shape vault uses:
-        'tenant_id = :t AND begins_with(trace_id, :p)' (:p optional)."""
+        'tenant_id = :t AND begins_with(trace_id, :p)' (:p optional).
+
+        Set `page_size` to make the fake paginate like real DynamoDB
+        (~1 MB pages): it then returns `LastEvaluatedKey` until exhausted,
+        which is what catches single-page reads."""
         if self.fail:
             raise RuntimeError("dynamo unavailable")
         tenant = ExpressionAttributeValues[":t"]
@@ -64,7 +71,26 @@ class FakeTable:
             for (item_tenant, sort_key), item in sorted(self.items.items())
             if item_tenant == tenant and sort_key.startswith(prefix)
         ]
-        return {"Items": matches}
+        if not self.page_size:
+            return {"Items": matches}
+
+        start = 0
+        if ExclusiveStartKey is not None:
+            last = (ExclusiveStartKey["tenant_id"], ExclusiveStartKey["trace_id"])
+            for i, item in enumerate(matches):
+                if (item["tenant_id"], item["trace_id"]) == last:
+                    start = i + 1
+                    break
+        page = matches[start : start + self.page_size]
+        self.query_calls += 1
+        result = {"Items": page}
+        if start + self.page_size < len(matches):
+            tail = page[-1]
+            result["LastEvaluatedKey"] = {
+                "tenant_id": tail["tenant_id"],
+                "trace_id": tail["trace_id"],
+            }
+        return result
 
     def dump_all(self) -> str:
         return json.dumps(list(self.items.values()), default=str)
