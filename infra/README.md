@@ -65,7 +65,9 @@ If `vault/` exists at the repo root, Lambda zips that tree (`vault.handlers.inge
 | `user_pool_client_id` | `NEXT_PUBLIC_COGNITO_CLIENT_ID` |
 | `cognito_domain` | `NEXT_PUBLIC_COGNITO_DOMAIN` (host, add `https://` if the SDK wants a URL) |
 
-Also: `ingest_url` (`TRACEVAULT_INGEST_URL`), `cloudfront_url` (UI + Cognito callback), `oidc_role_arn`, `table_name`, `payload_bucket`, `web_bucket`.
+Also: `cloudfront_url` (UI + Cognito callback), `oidc_role_arn`, `table_name`, `payload_bucket`, `web_bucket`.
+
+**`TRACEVAULT_INGEST_URL` ← `api_url`, not `ingest_url`.** Per `contracts/http.md` that variable is the API **base** URL: the SDK appends `/v1/traces` itself. The `ingest_url` output is the full endpoint (it already ends in `/v1/traces`) and exists for humans and `curl` — exporting it as `TRACEVAULT_INGEST_URL` makes the first live flight `POST .../v1/traces/v1/traces` and 404.
 
 Send the **Cognito ID token** as `Authorization: Bearer …` on GET `/v1/traces*`. The JWT authorizer audience is the app client id (`custom:tenant_id` is on the ID token). Ingest uses `X-Tenant-Key` only.
 

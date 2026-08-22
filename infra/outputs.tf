@@ -1,5 +1,5 @@
 output "ingest_url" {
-  description = "POST /v1/traces (X-Tenant-Key, not Cognito)."
+  description = "Full POST /v1/traces endpoint (X-Tenant-Key, not Cognito). For humans and curl. TRACEVAULT_INGEST_URL takes api_url instead - the SDK appends the path."
   value       = local.ingest_url
 }
 
