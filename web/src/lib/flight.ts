@@ -1,4 +1,22 @@
-import type { FlightSummary, RagHop, TraceSpan } from "@/lib/types";
+import type {
+  FlightListItem,
+  FlightSummary,
+  RagHop,
+  TraceSpan,
+  TraceSpanRecord,
+} from "@/lib/types";
+
+export function withDurations(spans: TraceSpanRecord[]): TraceSpan[] {
+  return spans.map((span) => {
+    const start = new Date(span.start_time).getTime();
+    const end = new Date(span.end_time).getTime();
+
+    return {
+      ...span,
+      durationMs: Math.max(end - start, 0),
+    };
+  });
+}
 
 export function summarizeFlight(spans: TraceSpan[]): FlightSummary {
   const sorted = [...spans].sort(
@@ -25,6 +43,36 @@ export function summarizeFlight(spans: TraceSpan[]): FlightSummary {
     costUsd,
     status: root.status,
     promptPreview,
+  };
+}
+
+export function summarizeFlightItem(item: FlightListItem): FlightSummary {
+  return {
+    traceId: item.trace_id,
+    tenantId: item.tenant_id,
+    startTime: item.start_time,
+    endTime: item.end_time,
+    durationMs: Math.max(
+      new Date(item.end_time).getTime() - new Date(item.start_time).getTime(),
+      0,
+    ),
+    costUsd: item.cost_usd,
+    status: item.status,
+    promptPreview: item.prompt_preview,
+  };
+}
+
+export function flightListItemFromSpans(spans: TraceSpan[]): FlightListItem {
+  const summary = summarizeFlight(spans);
+
+  return {
+    trace_id: summary.traceId,
+    tenant_id: summary.tenantId,
+    start_time: summary.startTime,
+    end_time: summary.endTime,
+    cost_usd: summary.costUsd,
+    status: summary.status,
+    prompt_preview: summary.promptPreview,
   };
 }
 
@@ -83,6 +131,19 @@ export function getRagHops(spans: TraceSpan[]): RagHop[] {
     });
 }
 
+export function findPrimaryModel(spans: TraceSpan[]): string {
+  return (
+    spans.find((span) => typeof span["gen_ai.request.model"] === "string")?.[
+      "gen_ai.request.model"
+    ] ?? "No model stored."
+  );
+}
+
+export function getSpanErrorMessage(span: TraceSpan): string | null {
+  const message = span.attributes?.error_message;
+  return typeof message === "string" && message.trim().length > 0 ? message : null;
+}
+
 export function formatDuration(durationMs: number): string {
   if (durationMs < 1000) {
     return `${durationMs} ms`;
@@ -105,4 +166,19 @@ export function formatTimestamp(timestamp: string): string {
     dateStyle: "medium",
     timeStyle: "medium",
   }).format(new Date(timestamp));
+}
+
+export function formatAuditTimestamp(timestamp: string): string {
+  return new Intl.DateTimeFormat("en-US", {
+    dateStyle: "medium",
+    timeStyle: "short",
+  }).format(new Date(timestamp));
+}
+
+export function formatTtl(expiresAt: number | null): string {
+  if (typeof expiresAt === "number" && Number.isFinite(expiresAt)) {
+    return formatTimestamp(new Date(expiresAt * 1000).toISOString());
+  }
+
+  return "7 day retention";
 }
