@@ -82,6 +82,13 @@ Send the **Cognito ID token** as `Authorization: Bearer …` on GET `/v1/traces*
 - Dynamo TTL `expires_at` (Alexis writes epoch seconds). PITR **off**. Payload prefix `{tenant_id}/{trace_id}/`.
 - No SSH `:22`, no EKS, no OpenSearch, no five Lambdas, no CloudTrail/GuardDuty/VPC-for-Lambda/Cognito MFA.
 
+## Known gaps in the live stack (not aspirational — checked against AWS)
+
+- **WAF is attached to CloudFront (fixed #100/#128), but evaluation is not yet confirmed.** WAFv2 cannot attach to an HTTP API, so the original `aws_wafv2_web_acl_association` failed on every apply; the fix replaced it with a `CLOUDFRONT`-scoped ACL set directly on the distribution's `web_acl_id`, and the attachment is confirmed live (`aws wafv2 list-web-acls --scope CLOUDFRONT`, distribution `WebACLId`). Not yet confirmed: minutes after apply, deliberate SQLi/XSS payloads at the edge still returned `200` and `AWS/WAFV2` metrics showed zero datapoints — plausibly still propagating (typically 10–20 min), but unverified until `BlockedRequests` shows a real hit. Flood protection until then is still API Gateway throttling plus the in-Lambda caps in `vault/`.
+- **CloudFront's TLS floor is `TLSv1`, not `TLSv1.2_2021`.** `cloudfront.tf` requests `minimum_protocol_version = "TLSv1.2_2021"`, but the distribution uses `cloudfront_default_certificate = true`, which pins AWS's default cert and silently ignores that setting — confirmed against the live distribution config. Raising it needs a custom domain plus an ACM certificate.
+
+Both are detailed with live evidence in [`../docs/RED_TEAM.md`](../docs/RED_TEAM.md) and [`../SECURITY.md`](../SECURITY.md).
+
 ## Import note
 
 `aws_iam_openid_connect_provider.github` is account-global. If `token.actions.githubusercontent.com` already exists, `terraform import` it instead of creating a second provider.

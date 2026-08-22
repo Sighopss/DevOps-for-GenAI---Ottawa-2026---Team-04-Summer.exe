@@ -3,12 +3,12 @@
 Issue #56. The judge path from PLAN.md, timed and scripted, with a labelled fallback. Roles: **Driver** (screen + terminal), **Narrator**. Stubs named aloud where present.
 
 - **API:** `https://55qm437628.execute-api.us-east-1.amazonaws.com`
-- **Explorer:** `https://d13b678j60bhap.cloudfront.net` (publish before demo — currently 403; see fallback)
+- **Explorer:** `https://d13b678j60bhap.cloudfront.net` — live (200) as of 2026-08-22. Start from `/`, not a bookmarked `/explorer`: direct navigation to `/explorer` (no extension) falls back to the welcome page instead of the flight explorer today, only in-app navigation reaches it (or the exact URL `/explorer.html`).
 - **Users:** `tenant-a`, `tenant-b` (Cognito hosted UI; passwords held by the operator)
 
 ## Prerequisites (before the clock)
 
-- [ ] Explorer published (web bucket synced; `/` returns 200 not 403)
+- [ ] Explorer reachable: `curl -so /dev/null -w '%{http_code}' https://d13b678j60bhap.cloudfront.net/` → `200` (it has been live since 2026-08-22; re-check anyway, an apply can regress it)
 - [ ] Both Cognito users can sign in
 - [ ] One tenant-a flight with PII already ingested (so the screen isn't empty): run `TENANT_A_KEY=… bash docs/redteam/redteam.sh` or `scripts/demo_pii_flight.sh`
 - [ ] Fallback recording rendered and labelled (see end)
@@ -39,7 +39,7 @@ Issue #56. The judge path from PLAN.md, timed and scripted, with a labelled fall
 ## Honesty callouts (say these; do not let a judge catch them)
 
 - **Bedrock is stubbed** for the demo flight (`TRACEVAULT_FAKE_BEDROCK`) — the span *shape* and redaction are real, the model call is faked to stay in budget.
-- **WAF is not in force** (WAFv2 can't attach to an HTTP API); flood protection is the in-Lambda caps + gateway throttling. Named in `docs/RED_TEAM.md`.
+- **WAF is attached to CloudFront but not yet confirmed filtering traffic** (fixed #100/#128 same day; a deliberate bad request had not yet been observed blocked as of this writing). Flood protection until confirmed is the in-Lambda caps + gateway throttling. Named in `docs/RED_TEAM.md`.
 - **TLS floor is TLSv1** at the edge (default cert); custom-domain + ACM is the fix. Named in `docs/RED_TEAM.md`.
 
 ## Fallback recording

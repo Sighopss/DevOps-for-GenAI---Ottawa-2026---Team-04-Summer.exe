@@ -15,6 +15,8 @@ Live path (flag unset): Amazon Bedrock in `AWS_REGION` (default `us-east-1`). Ag
 
 Override with `BEDROCK_MODEL_ID` / `BEDROCK_EMBED_MODEL_ID`. Any converse id outside the allowlist fails closed.
 
+**The Claude alternate is currently unusable, not just untested.** `anthropic.claude-3-5-sonnet-20241022-v2:0` is end-of-life on Bedrock (`ResourceNotFoundException`) and cannot be enabled in this account. Nova Lite is the only converse id that actually invokes today; see [`../docs/AI_INVENTORY.md`](../docs/AI_INVENTORY.md) for the live check and the planned retarget to a Sonnet 4.x id.
+
 ## Fake Bedrock (P-15)
 
 If `TRACEVAULT_FAKE_BEDROCK=1`, embeddings and `converse` are **stubs**. No AWS network. Tests use this path. Say so if a judge demo is run with the flag set — that is not live Bedrock.
