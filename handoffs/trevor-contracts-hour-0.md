@@ -4,7 +4,7 @@
 - Human: `Trevor`
 - Agent id: `trevor-contracts`
 - Branch: `trevor/contracts/hour-0`
-- PR: `TBD`
+- PR: `26`
 - Mission file: Hour 0 Design gate — lock HTTP + auth, span schema, full-flight fixtures
 
 ## Claimed paths (collision)
