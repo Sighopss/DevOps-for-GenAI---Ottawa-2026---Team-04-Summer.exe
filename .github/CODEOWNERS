@@ -1,16 +1,29 @@
 # Path fences match skills/trevor-recorder/ownership.md.
-# GitHub usernames @trevor / @alexis / @michael are not accounts on this
-# repo — reviews route to @Sighopss (owner) so CODEOWNERS stays valid.
-# Schema PRs still need all three humans in the thread. Only Trevor merges.
+#
+# Real accounts, each verified against the collaborator list on 2026-08-22:
+#   @Sighopss          Trevor Kutto     lead - the only one who merges
+#   @CodingAddict1530  Alexis Mugisha   vault/
+#   @NwaezetheDev      Michael Nwaeze   web/
+#
+# A CODEOWNERS entry naming an account without push access is silently
+# ignored by GitHub - the rule looks present and routes nothing. All three
+# above were checked with `gh api repos/:owner/:repo/collaborators` rather
+# than assumed, which is the point of issue #36.
+#
+# contracts/ is frozen: a schema PR needs all three humans in the thread.
+# Trevor still performs every merge.
 
-/contracts/  @Sighopss
+/contracts/  @Sighopss @CodingAddict1530 @NwaezetheDev
+
+/vault/      @CodingAddict1530 @Sighopss
+
+/web/        @NwaezetheDev @Sighopss
+/PRODUCT.md  @NwaezetheDev @Sighopss
+/DESIGN.md   @NwaezetheDev @Sighopss
+
 /sdk/        @Sighopss
 /demo-app/   @Sighopss
 /infra/      @Sighopss
 /scripts/    @Sighopss
 /Makefile    @Sighopss
 /.github/    @Sighopss
-/vault/      @Sighopss
-/web/        @Sighopss
-/PRODUCT.md  @Sighopss
-/DESIGN.md   @Sighopss
