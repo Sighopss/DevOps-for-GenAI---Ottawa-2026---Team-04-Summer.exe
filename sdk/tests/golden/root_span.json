@@ -1,0 +1,13 @@
+{
+  "trace_id": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "span_id": "1111111111111111",
+  "parent_id": null,
+  "tenant_id": "tenant-a",
+  "kind": "http",
+  "name": "POST /ask",
+  "status": "ok",
+  "start_time": "2026-08-18T18:00:00.000Z",
+  "end_time": "2026-08-18T18:00:01.200Z",
+  "cost_usd": 0.0,
+  "attributes": { "route": "/ask" }
+}
