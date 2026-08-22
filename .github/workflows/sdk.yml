@@ -1,0 +1,58 @@
+# Golden span vs schema lives in sdk pytest once sdk/ exists.
+# Skip cleanly on greenfield (sdk/ missing). Never AKIA.
+
+name: sdk
+
+on:
+  pull_request:
+    paths:
+      - "sdk/**"
+      - "demo-app/**"
+      - "contracts/**"
+      - ".github/workflows/sdk.yml"
+  push:
+    branches: [main]
+    paths:
+      - "sdk/**"
+      - "demo-app/**"
+      - "contracts/**"
+      - ".github/workflows/sdk.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: pytest-bandit
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4  # TODO: SHA-pin
+
+      - name: Gate — skip if sdk/ missing
+        id: gate
+        run: |
+          if [ -d sdk ]; then
+            echo "present=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "present=false" >> "$GITHUB_OUTPUT"
+            echo "skip: sdk/ missing (greenfield)"
+          fi
+
+      - name: Install uv (Python 3.12)
+        if: steps.gate.outputs.present == 'true'
+        uses: astral-sh/setup-uv@v10.0.1  # TODO: SHA-pin (no moving major tag)
+        with:
+          python-version: "3.12"
+
+      - name: pytest + bandit -r sdk
+        if: steps.gate.outputs.present == 'true'
+        working-directory: sdk
+        run: |
+          if [ -f uv.lock ]; then
+            uv sync --frozen
+          else
+            uv sync
+          fi
+          uv run pytest
+          uv run bandit -r .
