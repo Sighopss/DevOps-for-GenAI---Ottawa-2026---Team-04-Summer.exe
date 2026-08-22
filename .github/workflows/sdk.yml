@@ -1,4 +1,4 @@
-# Golden span vs schema lives in sdk pytest once sdk/ exists.
+﻿# Golden span vs schema lives in sdk pytest once sdk/ exists.
 # Skip cleanly on greenfield (sdk/ missing). Never AKIA.
 
 name: sdk
@@ -27,9 +27,9 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v4  # TODO: SHA-pin
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
 
-      - name: Gate — skip if sdk/ missing
+      - name: Gate â€” skip if sdk/ missing
         id: gate
         run: |
           if [ -d sdk ]; then
@@ -41,7 +41,7 @@ jobs:
 
       - name: Install uv (Python 3.12)
         if: steps.gate.outputs.present == 'true'
-        uses: astral-sh/setup-uv@v10.0.1  # TODO: SHA-pin (no moving major tag)
+        uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
         with:
           python-version: "3.12"
 

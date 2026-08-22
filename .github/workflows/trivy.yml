@@ -1,4 +1,4 @@
-# Filesystem scan on every PR + CycloneDX artifact (P-14).
+﻿# Filesystem scan on every PR + CycloneDX artifact (P-14).
 # Do not commit sbom.cdx.json. Never AKIA.
 
 name: trivy
@@ -15,7 +15,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v4  # TODO: SHA-pin
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
 
       # Unix-only guard. Cheap (~1s) and runs before the scans so a runner that
       # cannot execute our POSIX shell scripts fails loudly instead of silently.
@@ -28,8 +28,45 @@ jobs:
             echo "skip: scripts/check_unix.sh missing (greenfield)"
           fi
 
+      # Supply chain: every third-party action must stay pinned to a full commit
+      # SHA. A moving tag can be repointed by whoever controls that repo, and
+      # configure-aws-credentials runs in the job holding our OIDC deploy role —
+      # a hijacked tag there is a live AWS credential, not a broken build.
+      # This guard is why the pins from issue #64 stay pinned. See `make help`.
+      #
+      # It matches only real YAML step keys via ^\s*-?\s*uses:\s — matching the
+      # bare substring would also hit this workflow's own comments and script
+      # body, which is how the first version of this guard failed itself.
+      - name: Actions are SHA-pinned (supply chain)
+        run: |
+          set -euo pipefail
+          marker="TODO:$(printf ' ')SHA-pin"   # assembled so this file never contains it literally
+          fail=0
+          for f in .github/workflows/*.yml; do
+            while IFS= read -r line; do
+              body="${line#*uses:}"
+              ref="$(printf '%s' "$body" | sed 's/#.*//' | tr -d '[:space:]')"
+              case "$ref" in ./*|'') continue ;; esac
+              case "$body" in *"$marker"*)
+                echo "::error file=$f::pin placeholder left in place: $ref"
+                fail=1 ;;
+              esac
+              sha="${ref##*@}"
+              if ! printf '%s' "$sha" | grep -Eq '^[0-9a-f]{40}$'; then
+                echo "::error file=$f::not SHA-pinned: $ref"
+                fail=1
+              fi
+            done < <(grep -E '^[[:space:]]*-?[[:space:]]*uses:[[:space:]]' "$f" || true)
+          done
+          if [ "$fail" -ne 0 ]; then
+            echo "Every third-party action must be pinned to a 40-char commit SHA."
+            echo "See the 'Updating a pinned GitHub Action' section of make help."
+            exit 1
+          fi
+          echo "ok: every third-party action is SHA-pinned"
+
       - name: CycloneDX SBOM (P-14)
-        uses: aquasecurity/trivy-action@v0.36.0  # TODO: SHA-pin (post-2026 tag hijack)
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
         with:
           scan-type: fs
           scan-ref: .
@@ -38,14 +75,14 @@ jobs:
           exit-code: "0"
 
       - name: Upload CycloneDX artifact
-        uses: actions/upload-artifact@v4  # TODO: SHA-pin
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: sbom-cyclonedx
           path: sbom.cdx.json
           if-no-files-found: error
 
       - name: Trivy filesystem scan
-        uses: aquasecurity/trivy-action@v0.36.0  # TODO: SHA-pin
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
         with:
           scan-type: fs
           scan-ref: .

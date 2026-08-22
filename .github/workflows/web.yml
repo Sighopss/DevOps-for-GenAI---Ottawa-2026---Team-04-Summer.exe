@@ -1,4 +1,4 @@
-# Runs Michael's web tests (lint + Playwright vs fixtures). Skip if web/ missing.
+﻿# Runs Michael's web tests (lint + Playwright vs fixtures). Skip if web/ missing.
 
 name: web
 
@@ -22,9 +22,9 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v4  # TODO: SHA-pin
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
 
-      - name: Gate — skip if web/ missing
+      - name: Gate â€” skip if web/ missing
         id: gate
         run: |
           if [ -d web ]; then
@@ -36,13 +36,13 @@ jobs:
 
       - name: Setup pnpm
         if: steps.gate.outputs.present == 'true'
-        uses: pnpm/action-setup@v4  # TODO: SHA-pin
+        uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4.3.0
         with:
           version: 9
 
       - name: Setup Node 22
         if: steps.gate.outputs.present == 'true'
-        uses: actions/setup-node@v4  # TODO: SHA-pin
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version: "22"
 
