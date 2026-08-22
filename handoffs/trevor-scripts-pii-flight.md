@@ -42,6 +42,7 @@ DESIGN.md
 - Rubric rows (pts): `Presentation 5`
 - Tests / attack shown: script requires `--pii` path (synthetic email/SSN in the demo prompt). Does not curl vault with raw PII. Does not echo keys.
 - Stub/live (P-15): `TRACEVAULT_FAKE_BEDROCK=1` is valid for CI / no-AWS. Unset the flag for live Bedrock. Missing `demo-app/` → exit 2 naming `trevor-demo` until #30 merges.
+- Judge bar (`JUDGE.md`): never-kill intact — this script **is** click-path step 5, so its whole job is keeping that step runnable. `tenant-a` and `--pii` are both hardcoded in the `uv run` line, so the judged case cannot drift to a non-PII or wrong-tenant flight, and `TRACEVAULT_FAKE_BEDROCK` is deliberately left unset (live Bedrock by default; setting it is the disclosed P-15 stub). **Redaction** — the script never echoes the prompt, never `curl`s the API with raw PII, and prints no secret: it reads only env **names**, and its last line prints `ingest <url>` or `ingest unset` (a URL, never `X-Tenant-Key`). It never sends an `Authorization` header, so **ingest key ≠ user JWT** holds here too. Missing `demo-app/` exits 2 naming `trevor-demo`, so a broken step 5 fails loudly rather than silently skipping. No vault, UI, CORS, JWT, 403, or `/health` surface in this PR.
 
 ## What I shipped
 
