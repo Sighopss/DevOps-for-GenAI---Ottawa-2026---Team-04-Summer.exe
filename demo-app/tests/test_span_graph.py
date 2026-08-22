@@ -9,8 +9,10 @@ from pathlib import Path
 import pytest
 
 from demo_app.main import run
+from demo_app.emitter import load_emitter
+from tracevault import TraceVaultClient
 
-LAST_FLIGHT = Path(__file__).resolve().parents[1] / ".last-flight.json"
+LAST_FLIGHT = Path(__file__).resolve().parents[2] / "sdk" / ".last-flight.json"
 
 
 @pytest.fixture
@@ -25,6 +27,12 @@ def fake_bedrock(monkeypatch: pytest.MonkeyPatch) -> None:
         raise AssertionError("no AWS network")
 
     monkeypatch.setattr("demo_app.bedrock.boto3.client", _no_aws)
+
+
+def test_default_emitter_is_the_real_sdk(fake_bedrock: None) -> None:
+    client, _start_span = load_emitter("tenant-a")
+    assert type(client) is TraceVaultClient
+    assert client.ingest_url is None
 
 
 def test_span_graph(fake_bedrock: None) -> None:
