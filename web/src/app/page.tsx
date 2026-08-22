@@ -1,11 +1,11 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import {
   buildHostedUiUrl,
+  completeHostedUiSignIn,
   hasHostedUiConfig,
-  persistIdTokenFromHash,
 } from "@/lib/cognito";
 
 function TraceVaultMark() {
@@ -19,17 +19,39 @@ function TraceVaultMark() {
 
 export default function WelcomePage() {
   const hostedUiEnabled = hasHostedUiConfig();
+  const [authError, setAuthError] = useState<string | null>(null);
 
   useEffect(() => {
-    persistIdTokenFromHash();
+    let cancelled = false;
+
+    async function finishHostedUiSignIn() {
+      try {
+        const completed = await completeHostedUiSignIn();
+        if (completed && !cancelled) {
+          window.location.replace("/explorer");
+        }
+      } catch {
+        if (!cancelled) {
+          setAuthError(
+            "Hosted sign-in failed. The Cognito callback returned, but the code exchange did not complete.",
+          );
+        }
+      }
+    }
+
+    void finishHostedUiSignIn();
+
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
-  const handleSignIn = () => {
+  const handleSignIn = async () => {
     if (!hostedUiEnabled || typeof window === "undefined") {
       return;
     }
 
-    window.location.assign(buildHostedUiUrl(`${window.location.origin}/explorer`));
+    window.location.assign(await buildHostedUiUrl(window.location.origin));
   };
 
   return (
@@ -47,7 +69,13 @@ export default function WelcomePage() {
         </p>
         <div className="cta-row">
           {hostedUiEnabled ? (
-            <button className="primary-cta" onClick={handleSignIn} type="button">
+            <button
+              className="primary-cta"
+              onClick={() => {
+                void handleSignIn();
+              }}
+              type="button"
+            >
               Sign in with Cognito
             </button>
           ) : (
@@ -64,6 +92,7 @@ export default function WelcomePage() {
             Set Trevor&apos;s `NEXT_PUBLIC_COGNITO_*` values to enable hosted sign-in.
           </p>
         ) : null}
+        {authError ? <p className="helper-copy">{authError}</p> : null}
       </section>
     </main>
   );

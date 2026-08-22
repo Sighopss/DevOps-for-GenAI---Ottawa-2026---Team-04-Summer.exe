@@ -25,6 +25,105 @@ function expectNoRawPii(text: string) {
   expect(text).not.toMatch(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/i);
 }
 
+test("hosted UI code callback exchanges tokens and forwards into the explorer", async ({
+  page,
+}) => {
+  const traceA = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
+  const state = "state-token";
+  const codeVerifier = "verifier-token";
+
+  await page.addInitScript(
+    ({ storedState, storedVerifier }) => {
+      window.sessionStorage.setItem("tracevault.oauth_state", storedState);
+      window.sessionStorage.setItem("tracevault.code_verifier", storedVerifier);
+    },
+    { storedState: state, storedVerifier: codeVerifier },
+  );
+
+  await page.route(
+    "https://tracevault.auth.us-east-1.amazoncognito.com/oauth2/token",
+    async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          id_token: buildIdToken("tenant-a"),
+          access_token: "access-token",
+          refresh_token: "refresh-token",
+          token_type: "Bearer",
+          expires_in: 3600,
+        }),
+      });
+    },
+  );
+
+  await page.route("http://127.0.0.1:4010/v1/traces?limit=50", async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        flights: [
+          {
+            trace_id: traceA,
+            tenant_id: "tenant-a",
+            start_time: "2026-08-18T18:00:00.000Z",
+            end_time: "2026-08-18T18:00:01.200Z",
+            cost_usd: 0.0021,
+            status: "ok",
+            prompt_preview: "User [EMAIL] asked about [SSN]",
+          },
+        ],
+      }),
+    });
+  });
+
+  await page.route(`http://127.0.0.1:4010/v1/traces/${traceA}`, async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        trace_id: traceA,
+        tenant_id: "tenant-a",
+        expires_at: 1787421600,
+        spans: [
+          {
+            trace_id: traceA,
+            span_id: "1111111111111111",
+            parent_id: null,
+            tenant_id: "tenant-a",
+            kind: "http",
+            name: "demo.ask",
+            status: "ok",
+            start_time: "2026-08-18T18:00:00.000Z",
+            end_time: "2026-08-18T18:00:01.200Z",
+            cost_usd: 0,
+            attributes: { route: "/ask" },
+          },
+        ],
+      }),
+    });
+  });
+
+  await page.route(`http://127.0.0.1:4010/v1/traces/${traceA}/audit`, async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        events: [],
+      }),
+    });
+  });
+
+  await page.goto(`/?code=auth-code&state=${state}`);
+
+  await page.waitForURL("**/explorer**");
+  await expect(page.getByText("Live read active")).toBeVisible();
+  await expect(
+    page.getByText("Live reads follow the signed-in ID token for tenant-a."),
+  ).toBeVisible();
+  await expect(await page.evaluate(() => window.sessionStorage.getItem("tracevault.id_token"))).toBeTruthy();
+});
+
 test("fixture A renders the explorer flow", async ({ page }) => {
   const consoleMessages: string[] = [];
   page.on("console", (message) => {
