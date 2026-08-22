@@ -14,7 +14,7 @@
 | Alexis | _append: tool + model_ | _append: what it produced (`vault/` redact / store / ingest / read / audit / tests)_ | _append: how you reviewed it_ |
 | Michael | _append: tool + model_ | _append: what it produced (`web/`, `PRODUCT.md`, `DESIGN.md`, Playwright)_ | _append: how you reviewed it_ |
 
-Verifiable from this repo without taking anyone's word for it: `git log` on `main` shows one merge per feature branch, and every feature branch carries a matching `handoffs/<name>-<id>-<slug>.md`. If a change has no handoff, it did not go through this process.
+Verifiable from this repo without taking anyone's word for it: every feature branch carries a matching `handoffs/<name>-<id>-<slug>.md`, committed on that branch and repeated as the PR body. If a change has no handoff, it did not go through this process. As of this commit no lane has been merged yet — `main` holds only this shell — so the evidence is on the open PRs (`gh pr list --state open`) rather than in `main`'s merge history; that history fills in as Trevor merges.
 
 ## Model used by the product itself
 
@@ -29,7 +29,7 @@ Verifiable from this repo without taking anyone's word for it: `git log` on `mai
 | Faking it | `TRACEVAULT_FAKE_BEDROCK=1` makes the demo return a canned response instead of calling Bedrock. If the demo is run that way, say so out loud — see **Demo integrity (P-15)** in the README |
 | IAM scope | `bedrock:InvokeModel` limited to the model ids listed in tfvars. No wildcard model access |
 
-The model sees only the demo prompt and the retrieved corpus text. Model output is stored the same way a prompt is: redacted at ingest, hashed and masked, TTL 7 days.
+The model sees only the demo prompt and the retrieved corpus text. Model output is **contracted** to be stored the same way a prompt is — redacted at ingest, hashed and masked, TTL 7 days — but that ingest path (`vault/`) is not implemented yet, and nothing has been deployed. See **Demo integrity (P-15)** in the README for what is contracted versus built versus deployed.
 
 ## Not used
 

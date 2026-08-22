@@ -9,6 +9,8 @@ Reconstruct **one** AI request — spans, RAG hops, tokens, `$` — without ever
 
 ## Outcomes judges can measure
 
+These are the four **targets** the build is aimed at, not a claim about what runs today — see **Demo integrity (P-15)** below for what is actually built and deployed right now.
+
 1. Public HTTPS URL; `GET /health` → `200 {"ok":true}`
 2. One flight: waterfall + RAG hops + tokens + `cost_usd`
 3. Synthetic email/SSN in the prompt → **zero** raw PII at rest; UI shows `REDACTED`
@@ -55,6 +57,8 @@ Project name: **TraceVault**. Team name: **Summer.exe**. Registered repo name: `
 | `handoffs/` | One file per PR, per agent |
 | `README.md`, `AI_USAGE.md` | Trevor (submission shell) |
 
+This table is the **ownership map**, not an inventory of what exists. Most of these directories are still on open PRs or not started — `git ls-tree main` is the honest answer at any moment, and **Demo integrity (P-15)** below records the state as of this commit.
+
 Two Lambdas only: `vault-ingest` → `vault.handlers.ingest.handler`, `vault-read` → `vault.handlers.read.handler`. The HTTP surface is frozen in `contracts/http.md`; the span shape is `contracts/span.schema.json`. Do not invent a second API.
 
 ## Reproduce (P-11)
@@ -77,7 +81,7 @@ make vault         # vault/ tests
 make web           # web/ lint + Playwright
 ```
 
-`make help` **is** the runbook — health check, tenant users, rollback, log locations. Rollback is re-running the last green `deploy.yml`; there is no separate rollback script.
+`make help` **is** the runbook — health check, tenant users, rollback, log locations. Rollback is re-running the last green `deploy.yml`; there is no separate rollback script. Targets skip cleanly when a lane's directory is missing, which on `main` today means most of them skip: the `Makefile`, `.github/`, `infra/`, `sdk/`, `demo-app/`, and `scripts/` are all still on open PRs, and `vault/` and `web/` do not exist yet. Clone `main` and you get this shell; the commands above become meaningful as Trevor merges each lane.
 
 Infrastructure variables: copy `infra/envs/dev.tfvars.example` (or `prod.tfvars.example`) to `dev.tfvars` / `prod.tfvars` and fill your own values. The `*.tfvars.example` files are the only variable documentation that is committed.
 
@@ -85,18 +89,25 @@ Infrastructure variables: copy `infra/envs/dev.tfvars.example` (or `prod.tfvars.
 
 ## Demo integrity (P-15)
 
-Stated plainly, because undisclosed mocks are a handbook red flag:
+Stated plainly, because undisclosed mocks are a handbook red flag. Three different things get confused in a demo, so this table keeps them apart:
 
-| Piece | Status |
-|---|---|
-| CloudFront, Cognito, HTTP API, KMS, DynamoDB, S3 | **Live** after `terraform apply` |
-| Redaction on ingest (Presidio + deny-list) | **Live** — fail-closed, nothing stored on failure |
-| Bedrock model call | **Live** unless `TRACEVAULT_FAKE_BEDROCK=1` — with that set the model response is **faked** and we say so out loud |
-| Explorer, Day 1 | **Stub** — renders committed fixtures from `contracts/fixtures/`, not a live API |
-| Explorer, Day 2 | **Live** — `GET /v1/traces*` |
-| Ingest URL unset | The SDK does **not** POST; it writes `sdk/.last-flight.json` locally and does not crash. That local file is a fallback, **not** the product |
+- **Contracted** — frozen in `contracts/` (HTTP surface, span schema, fixtures). Agreed, not written.
+- **Built** — code exists in this repo. Note what is on `main` versus still on an open PR.
+- **Deployed** — running on AWS at a public URL.
 
-Demo data is **synthetic** PII only. Prompts are never stored raw: only `prompt_hash` plus a masked `prompt_preview`. Trace records expire on a DynamoDB TTL of 7 days; Lambda logs are retained 7 days.
+**As of this commit, nothing is deployed.** No `terraform apply` has run, `deploy.yml` has not run, and there is no public URL — which is why the **Public URL** line above still says TBD. `main` currently holds only this README, `AI_USAGE.md`, the handoff templates, and `LICENSE`; every lane below is on an open PR awaiting Trevor's merge, or not started.
+
+| Piece | Contracted | Built | Deployed | What that means today |
+|---|---|---|---|---|
+| CloudFront, Cognito, HTTP API, KMS, DynamoDB, S3 | Yes | Terraform written, open PR (Trevor) | **No** | Terraform exists but has never been applied. There is no live infrastructure and no URL yet. |
+| Redaction on ingest (Presidio + deny-list) | Yes — `contracts/http.md` | **No — not yet implemented** | **No** | `vault/` does not exist in this repo. Alexis's lane has not landed and has no open PR. Fail-closed `redaction_failed` with nothing stored is the **contracted** behaviour once it lands — it is not running now, and nothing has been redacted by this product yet. |
+| Ingest and read API (`POST /v1/traces`, `GET /v1/traces*`, audit, 403) | Yes — `contracts/http.md` | **No — not yet implemented** | **No** | Same lane as the row above: both Lambdas are Alexis's `vault/`. The routes are frozen and the error JSON is agreed; no handler code exists yet. |
+| Bedrock model call | Yes | Demo written, open PR (Trevor) | **No** | When it runs, it is a real Bedrock call **unless** `TRACEVAULT_FAKE_BEDROCK=1`, which returns a canned response. If we demo with that set, we say so out loud. |
+| Explorer, Day 1 (fixtures) | Yes — `contracts/fixtures/` | **No — not yet implemented** | **No** | `web/` does not exist in this repo. Michael's lane has not landed. The fixtures it is meant to render (`tenant-a-rag.json`, `tenant-b-forbidden.json`) **are** committed under `contracts/fixtures/`; there is no UI rendering them yet. |
+| Explorer, Day 2 (live data) | Yes | **No** | **No** | Depends on both `web/` and `vault/`. Neither exists. This is the plan for Day 2, not a current capability. |
+| Ingest URL unset | Yes | Yes — SDK written, open PR (Trevor) | n/a | Accurate as written: with `TRACEVAULT_INGEST_URL` unset the SDK does **not** POST — it writes `sdk/.last-flight.json` locally and does not crash. That local file is a fallback, **not** the product. |
+
+Demo data is **synthetic** PII only. The privacy properties this product is built to have — raw prompts never persisted, only `prompt_hash` plus a masked `prompt_preview`, DynamoDB TTL 7 days, Lambda logs 7 days — are contracted and are the bar the `vault/` tests must prove. They are not yet demonstrated by running code, and this README will not claim they are until that code lands and is deployed.
 
 ## AI transparency
 
