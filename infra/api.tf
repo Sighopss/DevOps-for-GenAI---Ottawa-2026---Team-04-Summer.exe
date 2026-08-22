@@ -120,10 +120,21 @@ resource "aws_lambda_permission" "read_apigw" {
   source_arn    = "${aws_apigatewayv2_api.http.execution_arn}/*/GET/v1/traces*"
 }
 
+# Fronts the CloudFront distribution, not the HTTP API (#100).
+#
+# WAFv2 attaches to API Gateway *REST* APIs only; this stack uses an HTTP API,
+# so `aws_wafv2_web_acl_association` failed on every apply and the ACL filtered
+# nothing. CloudFront is the surface WAFv2 can protect here, and it is what the
+# judge-facing Explorer is served from. CloudFront-scoped ACLs must live in
+# us-east-1, which is this stack's region.
+#
+# `scope` is immutable, so this replaces the old REGIONAL ACL rather than
+# updating it. The resource address stays `.api` to avoid a state move; the
+# ACL's own name is corrected to `-cdn`.
 resource "aws_wafv2_web_acl" "api" {
-  name        = "${local.name}-api"
-  description = "AWS managed common rules in front of the TraceVault HTTP API"
-  scope       = "REGIONAL"
+  name        = "${local.name}-cdn"
+  description = "AWS managed common rules in front of the TraceVault CloudFront distribution"
+  scope       = "CLOUDFRONT"
 
   default_action {
     allow {}
@@ -172,7 +183,6 @@ resource "aws_wafv2_web_acl" "api" {
   }
 }
 
-resource "aws_wafv2_web_acl_association" "api" {
-  resource_arn = aws_apigatewayv2_stage.default.arn
-  web_acl_arn  = aws_wafv2_web_acl.api.arn
-}
+# No `aws_wafv2_web_acl_association` here on purpose: CloudFront is not
+# associated through that resource. The distribution takes `web_acl_id`
+# directly — see `web_acl_id` in cloudfront.tf.

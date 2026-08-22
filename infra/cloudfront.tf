@@ -53,7 +53,12 @@ resource "aws_cloudfront_response_headers_policy" "web" {
         "connect-src 'self' https://*.execute-api.${var.aws_region}.amazonaws.com https://*.amazoncognito.com https://cognito-idp.${var.aws_region}.amazonaws.com;",
         "img-src 'self' data:;",
         "style-src 'self' 'unsafe-inline';",
-        "script-src 'self';",
+        # 'unsafe-inline' is required by the Next.js static export, which emits
+        # an inline bootstrap script. Reconciled from the live policy (#116).
+        # It weakens the XSS defence CSP is here to provide — the fix is a
+        # nonce/hash-based policy, tracked as a roadmap item, not a same-day
+        # change during a delegated apply.
+        "script-src 'self' 'unsafe-inline';",
         "frame-ancestors 'none';",
         "base-uri 'self';",
         "form-action 'self';",
@@ -69,6 +74,17 @@ resource "aws_cloudfront_response_headers_policy" "web" {
       referrer_policy = "no-referrer"
       override        = true
     }
+
+    # Present on the live policy; declared here so the config matches what is
+    # deployed and a targeted plan is clean (#116). X-XSS-Protection is a
+    # legacy header — the browser auditor it controls has been removed from
+    # current browsers, so CSP above is the control that actually applies.
+    # Dropping it is a separate call for the infra owner, not drift to fix.
+    xss_protection {
+      protection = true
+      mode_block = true
+      override   = true
+    }
   }
 }
 
@@ -79,6 +95,11 @@ resource "aws_cloudfront_distribution" "web" {
   default_root_object = "index.html"
   http_version        = "http2and3"
   price_class         = "PriceClass_100"
+
+  # WAFv2 attaches to CloudFront through this argument, not through
+  # `aws_wafv2_web_acl_association` (which only supports REGIONAL resources).
+  # Takes the ACL ARN for WAFv2; the ID form is WAF Classic. See #100.
+  web_acl_id = aws_wafv2_web_acl.api.arn
 
   origin {
     domain_name              = aws_s3_bucket.web.bucket_regional_domain_name
