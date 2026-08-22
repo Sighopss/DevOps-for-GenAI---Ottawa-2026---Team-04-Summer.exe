@@ -45,6 +45,20 @@ class FakeTable:
         item = self.items.get((Key["tenant_id"], Key["trace_id"]))
         return {"Item": item} if item is not None else {}
 
+    def query(self, KeyConditionExpression, ExpressionAttributeValues, **kwargs):
+        """Supports the one expression shape vault uses:
+        'tenant_id = :t AND begins_with(trace_id, :p)' (:p optional)."""
+        if self.fail:
+            raise RuntimeError("dynamo unavailable")
+        tenant = ExpressionAttributeValues[":t"]
+        prefix = ExpressionAttributeValues.get(":p", "")
+        matches = [
+            item
+            for (item_tenant, sort_key), item in sorted(self.items.items())
+            if item_tenant == tenant and sort_key.startswith(prefix)
+        ]
+        return {"Items": matches}
+
     def dump_all(self) -> str:
         return json.dumps(list(self.items.values()), default=str)
 
