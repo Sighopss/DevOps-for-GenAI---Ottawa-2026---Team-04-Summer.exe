@@ -42,8 +42,16 @@ resource "aws_cognito_user_pool_client" "web" {
   allowed_oauth_flows                  = ["code"]
   allowed_oauth_scopes                 = ["openid", "email", "profile"]
   supported_identity_providers         = ["COGNITO"]
-  callback_urls                        = [local.web_origin]
-  logout_urls                          = [local.web_origin]
+  # Hosted UI authorize + token exchange must match these exactly.
+  # Web sign-in uses `${origin}/explorer/` (trailingSlash export).
+  callback_urls = [
+    local.web_origin,
+    "${local.web_origin}/explorer/",
+  ]
+  logout_urls = [
+    local.web_origin,
+    "${local.web_origin}/explorer/",
+  ]
   prevent_user_existence_errors        = "ENABLED"
   explicit_auth_flows = [
     "ALLOW_USER_PASSWORD_AUTH",
