@@ -54,7 +54,18 @@ jobs:
           aws-region: us-east-1
       - name: terraform apply dev
         working-directory: infra
+        env:
+          TF_VAR_tenant_a_password: ${{ secrets.TF_VAR_TENANT_A_PASSWORD }}
+          TF_VAR_tenant_b_password: ${{ secrets.TF_VAR_TENANT_B_PASSWORD }}
         run: |
+          # Cognito user passwords use lifecycle.ignore_changes, so placeholders
+          # satisfy required vars without rotating judge logins when secrets are unset.
+          if [ -z "${TF_VAR_tenant_a_password}" ]; then
+            export TF_VAR_tenant_a_password='CiPlanOnly-Aa1!'
+          fi
+          if [ -z "${TF_VAR_tenant_b_password}" ]; then
+            export TF_VAR_tenant_b_password='CiPlanOnly-Bb1!'
+          fi
           terraform init -input=false
           terraform apply -input=false -auto-approve -no-color
 
@@ -81,7 +92,16 @@ jobs:
           aws-region: us-east-1
       - name: terraform apply prod
         working-directory: infra
+        env:
+          TF_VAR_tenant_a_password: ${{ secrets.TF_VAR_TENANT_A_PASSWORD }}
+          TF_VAR_tenant_b_password: ${{ secrets.TF_VAR_TENANT_B_PASSWORD }}
         run: |
+          if [ -z "${TF_VAR_tenant_a_password}" ]; then
+            export TF_VAR_tenant_a_password='CiPlanOnly-Aa1!'
+          fi
+          if [ -z "${TF_VAR_tenant_b_password}" ]; then
+            export TF_VAR_tenant_b_password='CiPlanOnly-Bb1!'
+          fi
           terraform init -input=false
           terraform apply -input=false -auto-approve -no-color
 

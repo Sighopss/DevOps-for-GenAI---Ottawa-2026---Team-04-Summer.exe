@@ -50,7 +50,9 @@ The system instruction is a single line, corpus-grounding only: the question, th
 | API | `bedrock-runtime` `InvokeModel`, body `{"inputText": ...}`, expecting `{"embedding": [...]}` — the Amazon Titan embeddings request/response shape |
 | Used for | Embedding the question and the three corpus documents, then cosine similarity to pick top-2 (`RETRIEVE_TOP_K = 2` in `demo-app/src/demo_app/rag.py`) |
 
-> **Closed gap.** Titan Embed V2 is now on the IAM allowlist with the two converse models. A live run without `TRACEVAULT_FAKE_BEDROCK` uses Nova Lite (default) or Claude 3.5 Sonnet for Converse, and Titan Embed V2 for RAG. Account-level Bedrock model access must still be enabled in the AWS console for those three ids, and the next `terraform apply` must land so the OIDC role picks up the new ARN.
+> **IAM allowlist: live (2026-08-22).** OIDC role `tracevault-dev-gha-oidc` policy `tracevault-stack` now includes foundation-model + inference-profile ARNs for Claude 3.5 Sonnet, Nova Lite, and Titan Embed V2 (CLI put matching `infra` locals; CI `terraform apply` was still failing on Cognito password vars until the deploy workflow fix lands).
+>
+> **Model access (us-east-1):** Nova Lite and Titan Embed V2 invoke successfully. `anthropic.claude-3-5-sonnet-20241022-v2:0` is **EOL on Bedrock** (`ResourceNotFoundException` / end-of-life) — it cannot be enabled in console or CLI. Anthropic access in this account works for current models (smoke: `us.anthropic.claude-sonnet-4-6` converse → `ok`). Follow-up: retarget the allowlist from Claude 3.5 to an active Sonnet 4.x id.
 
 ### Fake mode — disclosed stub
 
