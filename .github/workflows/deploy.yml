@@ -162,6 +162,9 @@ jobs:
           BUCKET="$(terraform output -raw web_bucket)"
           DIST="$(terraform output -raw cloudfront_distribution_id)"
           aws s3 sync ../web/out "s3://${BUCKET}" --delete
+          # S3 REST/OAC has no IndexDocument; without these keys /explorer(/)
+          # 403/404 → custom_error_response → welcome index.html (dead CTAs).
+          bash ../web/scripts/publish-explorer-cdn-keys.sh "${BUCKET}"
           aws cloudfront create-invalidation --distribution-id "${DIST}" --paths "/*"
       - name: Skip sync (no OIDC or infra)
         if: env.AWS_ROLE_ARN == '' || needs.gate.outputs.infra != 'true'
