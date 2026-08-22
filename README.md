@@ -25,12 +25,12 @@ $ curl https://55qm437628.execute-api.us-east-1.amazonaws.com/health
 200 {"ok":true}
 ```
 
-**Explorer UI — built, not published.** `https://d13b678j60bhap.cloudfront.net` answers **403** at `/`. The distribution is
-live, but the web bucket holds only `health.json`; `web/` landed on `main` in #75 and has not been
-built and uploaded.
+**Explorer UI — live.** `https://d13b678j60bhap.cloudfront.net/` answers **200** (welcome + Cognito
+sign-in). Flight explorer is published at `/explorer.html`. Typed `/explorer` (no `.html`) falls back
+to the welcome page — in-app navigation and `/explorer.html` work. See **Demo integrity (P-15)**.
 
-Applied 2026-08-22: 66 managed resources, both vault Lambdas, all five routes. What is *not* live is
-listed in **Demo integrity (P-15)** below — including one security control that cannot work as designed.
+Applied 2026-08-22: 66 managed resources, both vault Lambdas, all five routes. Honest gaps that remain
+are listed in **Demo integrity (P-15)** below.
 
 ## Governance, security and evidence
 
@@ -145,15 +145,18 @@ Verified against AWS rather than against Terraform's output: `GET /health` → `
 `GET /v1/traces` → `401` with no JWT, `POST /v1/traces` → `401` with no tenant key — the
 contracted fail-closed behaviour.
 
-Three things are **not** live, and they are the honest gaps:
+Honest gaps that remain (not softened):
 
-1. **The Explorer UI is not published.** `web/` is on `main` (#75), but nothing has been uploaded to
-   the web bucket, so CloudFront serves 403 at `/`.
-2. **No authenticated request has ever been made.** Every check above is unauthenticated. No real
-   flight has been ingested, so nothing has been redacted in production, and tenant isolation has not
-   been demonstrated end-to-end against a live token — only in tests.
-3. **WAF filters nothing.** The web ACL exists but is associated with no resource. See
-   [`SECURITY.md`](SECURITY.md).
+1. **Explorer direct-nav rough edge.** Published and serving 200 at `/` and `/explorer.html`; typed
+   `/explorer` falls back to the welcome page (Next export writes `explorer.html`, not
+   `explorer/index.html`).
+2. **Cognito-authenticated Explorer path is still the open proof.** Live ingest with a tenant key
+   and at-rest redaction are recorded in [`docs/OBSERVABILITY.md`](docs/OBSERVABILITY.md) (#50).
+   Cross-tenant refusal against a live Cognito ID token remains the Explorer/red-team track.
+3. **WAF guards CloudFront and is demonstrably blocking (#100/#128/#134).** HTTP API ingest is
+   still not WAF-fronted (WAFv2 cannot attach to an HTTP API) — flood bounds there remain gateway
+   throttling + in-Lambda caps. Edge TLS floor is still TLSv1 under the default cert (#101). See
+   [`SECURITY.md`](SECURITY.md) and [`docs/RED_TEAM.md`](docs/RED_TEAM.md).
 
 Verify the built column yourself:
 
@@ -165,13 +168,13 @@ cd demo-app && TRACEVAULT_FAKE_BEDROCK=1 uv run pytest -q     # 2 passed
 
 | Piece | Contracted | Built | Deployed | What that means today |
 |---|---|---|---|---|
-| CloudFront, Cognito, HTTP API, KMS, DynamoDB, S3 | Yes | Yes — `infra/` on `main` | **Yes** — applied 2026-08-22 | 66 managed resources live; `GET /health` → `200` from the public internet. **Exception:** the WAF web ACL exists but is attached to nothing — `aws_wafv2_web_acl_association` cannot target an HTTP API. |
-| Redaction on ingest (deny-list, Presidio optional) | Yes — `contracts/http.md` | **Yes** — `vault/redact/` + re-applied in `vault/ingest/` | **Yes** — in both Lambdas | Implemented and tested: fail-closed `redaction_failed` stores nothing, adversarial suite included. Presidio is optional and **absent in CI**, so the tested guarantee is deny-list-driven. The code is deployed, but **no real traffic has been ingested**, so nothing has been redacted in production yet. |
-| Ingest API (`POST /v1/traces`) | Yes — `contracts/http.md` | **Yes** — `vault/handlers/ingest.py` | **Yes** — `tracevault-dev-vault-ingest` | Tenant-key auth, schema validation, tenant-scoped writes, S3-then-Dynamo commit order. Live and fail-closed (`401` without a key). **Never exercised with a valid key**, so the write path is proven only against injected fakes. |
+| CloudFront, Cognito, HTTP API, KMS, DynamoDB, S3 | Yes | Yes — `infra/` on `main` | **Yes** — applied 2026-08-22 | 66 managed resources live; `GET /health` → `200` from the public internet. WAF is CLOUDFRONT-scoped on the distribution (`web_acl_id`) and is demonstrably blocking (#100/#128/#134); HTTP API ingest is still not WAF-fronted. |
+| Redaction on ingest (deny-list, Presidio optional) | Yes — `contracts/http.md` | **Yes** — `vault/redact/` + re-applied in `vault/ingest/` | **Yes** — in both Lambdas | Implemented and tested: fail-closed `redaction_failed` stores nothing, adversarial suite included. Presidio is optional and **absent in CI**, so the tested guarantee is deny-list-driven. Live PII ingest + at-rest redaction evidence is in [`docs/OBSERVABILITY.md`](docs/OBSERVABILITY.md) (#50). |
+| Ingest API (`POST /v1/traces`) | Yes — `contracts/http.md` | **Yes** — `vault/handlers/ingest.py` | **Yes** — `tracevault-dev-vault-ingest` | Tenant-key auth, schema validation, tenant-scoped writes, S3-then-Dynamo commit order. Live and fail-closed (`401` without a key). Valid-key write path exercised live (#50 evidence in [`docs/OBSERVABILITY.md`](docs/OBSERVABILITY.md)). |
 | Read + audit API (`GET /v1/traces*`, 403, audit rows) | Yes — `contracts/http.md` | **Yes** — `vault/read/`, `vault/audit/`, `vault/handlers/read.py` (#68, #69, #71) | **Yes** — `tracevault-dev-vault-read` | 403-not-404 has code and tests (`vault/read/tenant_guard.py`, `vault/tests/read/test_isolation.py`). Live and returning `401` without a JWT. **Not yet exercised with a real Cognito token**, so cross-tenant refusal is proven in tests, not in production. |
 | Bedrock model call | Yes | Yes — `demo-app/` on `main` | **Partial** | IAM allowlist on the OIDC role includes Claude 3.5 Sonnet + Nova Lite + Titan Embed V2 (live 2026-08-22). Nova Lite + Titan Embed V2 invoke in `us-east-1`. Claude 3.5 Sonnet is **EOL on Bedrock** and cannot be enabled; Anthropic still works via Sonnet 4.x inference profiles. Demo still defaults to fake in tests (`TRACEVAULT_FAKE_BEDROCK=1`). Explorer publish and full CI apply remain open under #48. |
 | Span emission (SDK) | Yes — `contracts/span.schema.json` | Yes — `sdk/` on `main` | **No** | Emits schema-shaped spans with masked preview + `prompt_hash`. |
-| Explorer, Day 1 (fixtures) | Yes — `contracts/fixtures/` | **Yes** — `web/` on `main` (#75), Playwright specs | **No** | The fixture-backed explorer renders list, detail, masked PII and the contracted forbidden UI. **Nothing is uploaded to the web bucket**, which holds only `health.json`, so CloudFront serves 403 at `/`. Built, not published. |
+| Explorer, Day 1 (fixtures) | Yes — `contracts/fixtures/` | **Yes** — `web/` on `main` (#75), Playwright specs | **Yes** — published to the web bucket | Fixture-backed explorer live at `/explorer.html`. Typed `/explorer` falls back to welcome (Next export writes `explorer.html`, not `explorer/index.html`). |
 | Explorer, Day 2 (live data) | Yes | **Partial** — `web/` renders fixtures; `web/src/lib/cognito.ts` exists | **No** | Both prerequisites now exist (`web/` and a deployed read handler), but the UI is still fixture-backed and has not been pointed at the live API. |
 | Ingest URL unset | Yes | Yes — `sdk/` on `main` | n/a | With `TRACEVAULT_INGEST_URL` unset the SDK does **not** POST — it writes `sdk/.last-flight.json` locally and does not crash. That local file is a fallback, **not** the product. |
 
@@ -229,9 +232,9 @@ Deliberately not built in 48h: custom domain, multi-region, PITR, CloudTrail, Gu
 ### Recorder / edge — known limits and where they go next
 
 - **Default CloudFront certificate pins a TLSv1 floor.** Viewer `minimum_protocol_version = TLSv1.2_2021` is ignored while `cloudfront_default_certificate = true` (#101). *Next:* custom domain + ACM in `us-east-1` so TLS 1.2 is actually enforced.
-- **WAF WebACL is not attached to CloudFront yet.** Flood control today is API Gateway throttling + in-Lambda caps (#100, Alexis apply from a clean machine). *Next:* associate the ACL to the distribution and keep a sampled allow/block proof.
+- **WAF guards CloudFront and is demonstrably blocking; ingest is not WAF-fronted.** Distribution `web_acl_id` + live block evidence (#100/#128/#134). HTTP API flood bounds remain API Gateway throttling + in-Lambda caps. *Next:* keep sampled block metrics current after ACL changes; optionally put the API behind CloudFront so WAF covers ingest too.
 - **`deploy.yml` on `main` has been red since mid-day 2026-08-22.** Root causes seen: Action setup flakiness and `web-sync` reading Terraform outputs without a successful apply. Rollback control still works; ancient greens are unsafe once workflow secrets/vars move ([`docs/DEPLOY_GATE.md`](docs/DEPLOY_GATE.md)). *Next:* restore a green apply on current `main`, then treat that run as the rollback target.
-- **Explorer is built, not published.** `web/` is on `main`; the web bucket still lacks a full sync, so CloudFront `/` is not the product UI yet. *Next:* green `web-sync` (or a one-shot sync) after apply outputs are healthy.
+- **Explorer is published, with a direct-nav rough edge.** CloudFront `/` and `/explorer.html` return 200; typed `/explorer` falls back to the welcome page because the Next static export writes `explorer.html`, not `explorer/index.html`. *Next:* CloudFront rewrite or `trailingSlash: true`.
 - **SDK fallback is not the product.** Unset or unreachable ingest writes `sdk/.last-flight.json` and does not crash (#49). *Next:* keep that as a laptop/demo safety net only — judges see live ingest for the scored path.
 
 ## License
