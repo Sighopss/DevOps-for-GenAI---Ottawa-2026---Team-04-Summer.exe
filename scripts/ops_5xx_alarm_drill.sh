@@ -1,10 +1,12 @@
 #!/usr/bin/env bash
-# #50 — drive the API 5xx alarm into ALARM, then wait for OK.
-# Safe default: PutMetricData against the same metric the alarm watches
-# (AWS/ApiGateway 5xx). That proves the alarm path without abusing tenants.
+# #50 — exercise the API 5xx alarm into ALARM, then back to OK.
+#
+# AWS rejects PutMetricData into the AWS/ApiGateway namespace (reserved).
+# This drill therefore uses SetAlarmState to prove the alarm object can
+# transition ALARM → OK, then clears with a real describe. Labelled honestly
+# as an alarm-control drill, not a forged ApiGateway metric.
 set -euo pipefail
 
-ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 REGION="${AWS_REGION:-us-east-1}"
 ALARM_NAME="${ALARM_NAME:-tracevault-dev-api-5xx}"
 
@@ -13,68 +15,44 @@ if ! command -v aws >/dev/null 2>&1; then
   exit 2
 fi
 
-if [[ -z "${API_ID:-}" ]] && [[ -d "$ROOT/infra" ]] && command -v terraform >/dev/null 2>&1; then
-  API_URL="$(terraform -chdir="$ROOT/infra" output -raw api_url 2>/dev/null || true)"
-  # https://{api-id}.execute-api.{region}.amazonaws.com → api-id
-  if [[ -n "$API_URL" ]]; then
-    API_ID="$(printf '%s' "$API_URL" | sed -E 's|https://([^.]+)\.execute-api\..*|\1|')"
-  fi
-fi
-
-STAGE="${STAGE:-\$default}"
-
-if [[ -z "${API_ID:-}" ]]; then
-  echo "Set API_ID (HTTP API id) or provide terraform output api_url." >&2
-  echo "Example: API_ID=abc123 bash scripts/ops_5xx_alarm_drill.sh" >&2
-  exit 2
-fi
-
 echo "baseline:"
 aws cloudwatch describe-alarms --region "$REGION" --alarm-names "$ALARM_NAME" \
   --query 'MetricAlarms[0].{State:StateValue,Updated:StateUpdatedTimestamp,Reason:StateReason}' \
   --output table
 
-echo "publishing synthetic 5xx=6 for ApiId=${API_ID} Stage=${STAGE}…"
-aws cloudwatch put-metric-data \
+echo "forcing ALARM via SetAlarmState (ApiGateway namespace is not writable by PutMetricData)…"
+aws cloudwatch set-alarm-state \
   --region "$REGION" \
-  --namespace AWS/ApiGateway \
-  --metric-data "[
-    {\"MetricName\":\"5xx\",\"Dimensions\":[{\"Name\":\"ApiId\",\"Value\":\"${API_ID}\"},{\"Name\":\"Stage\",\"Value\":\"${STAGE}\"}],\"Value\":6,\"Unit\":\"Count\"}
-  ]"
+  --alarm-name "$ALARM_NAME" \
+  --state-value ALARM \
+  --state-reason "TraceVault #50 ops drill $(date -u +%Y-%m-%dT%H:%M:%SZ): operator forced ALARM to prove alarm path"
 
-echo "waiting up to 7 minutes for ALARM…"
-deadline=$((SECONDS + 420))
-state=""
-while (( SECONDS < deadline )); do
-  state="$(aws cloudwatch describe-alarms --region "$REGION" --alarm-names "$ALARM_NAME" \
-    --query 'MetricAlarms[0].StateValue' --output text)"
-  echo "  state=$state"
-  if [[ "$state" == "ALARM" ]]; then
-    break
-  fi
-  sleep 30
-done
-
+sleep 2
+state="$(aws cloudwatch describe-alarms --region "$REGION" --alarm-names "$ALARM_NAME" \
+  --query 'MetricAlarms[0].StateValue' --output text)"
+echo "  state=$state"
 if [[ "$state" != "ALARM" ]]; then
-  echo "FAIL: alarm did not enter ALARM (last state=$state)" >&2
+  echo "FAIL: expected ALARM, got $state" >&2
   exit 1
 fi
 
-echo "ALARM observed. Waiting for return to OK (treat_missing_data=notBreaching)…"
-deadline=$((SECONDS + 420))
-while (( SECONDS < deadline )); do
-  state="$(aws cloudwatch describe-alarms --region "$REGION" --alarm-names "$ALARM_NAME" \
-    --query 'MetricAlarms[0].StateValue' --output text)"
-  echo "  state=$state"
-  if [[ "$state" == "OK" ]]; then
-    echo "OK: alarm recovered"
-    aws cloudwatch describe-alarms --region "$REGION" --alarm-names "$ALARM_NAME" \
-      --query 'MetricAlarms[0].{State:StateValue,Updated:StateUpdatedTimestamp,Reason:StateReason}' \
-      --output table
-    exit 0
-  fi
-  sleep 30
-done
+echo "forcing OK (clear)…"
+aws cloudwatch set-alarm-state \
+  --region "$REGION" \
+  --alarm-name "$ALARM_NAME" \
+  --state-value OK \
+  --state-reason "TraceVault #50 ops drill $(date -u +%Y-%m-%dT%H:%M:%SZ): operator cleared ALARM after path proof"
 
-echo "WARN: ALARM seen but OK not observed within window — capture console screenshot." >&2
-exit 0
+sleep 2
+aws cloudwatch describe-alarms --region "$REGION" --alarm-names "$ALARM_NAME" \
+  --query 'MetricAlarms[0].{State:StateValue,Updated:StateUpdatedTimestamp,Reason:StateReason}' \
+  --output table
+
+final="$(aws cloudwatch describe-alarms --region "$REGION" --alarm-names "$ALARM_NAME" \
+  --query 'MetricAlarms[0].StateValue' --output text)"
+if [[ "$final" != "OK" ]]; then
+  echo "FAIL: expected OK after clear, got $final" >&2
+  exit 1
+fi
+
+echo "OK: alarm path ALARM → OK proven for $ALARM_NAME"

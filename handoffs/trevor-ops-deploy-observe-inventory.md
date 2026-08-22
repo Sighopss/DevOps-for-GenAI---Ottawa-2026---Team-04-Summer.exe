@@ -39,13 +39,15 @@ infra/*.tf                      (no Terraform edits this PR — prod GH Environm
 
 ### #50 Observability pack
 - `docs/OBSERVABILITY.md` — where traces/metrics/logs/health/audit live + operator commands.
-- `/health` proven live → `{"ok":true}`.
-- `scripts/ops_5xx_alarm_drill.sh` ready; live ALARM→OK still needs operator AWS SSO (token expired on this machine).
+- `/health` proven live → `{"ok":true}` (profile `tracevault`).
+- `scripts/ops_5xx_alarm_drill.sh` — live ALARM→OK via `SetAlarmState` at ~19:24Z UTC 2026-08-22.
+- Live PII flight `b352dbfc…` → S3 payload masked (`[EMAIL]`/`[SSN]`); ingest logs 0 hits for raw email/SSN.
 - `make help` points at both evidence docs.
+- Still open: Explorer audit-row demo (Michael).
 
 ### #55 Technology inventory
 - Trevor rows + assembly under README **Technology inventory** (Alexis vault rows already on `main` via #117).
-- Recorder/edge limitations + roadmap under **Limitations** (TLS floor, WAF, red deploy, unpublished Explorer, SDK fallback).
+- Recorder/edge limitations + roadmap under **Limitations** (TLS floor, WAF attached/#128 with evaluation as separate claim, red deploy, Explorer published with `/explorer` rough edge, SDK fallback).
 
 ## Verification
 
