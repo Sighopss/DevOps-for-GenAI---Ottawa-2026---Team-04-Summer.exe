@@ -81,7 +81,9 @@ Empty = incomplete PR. Copy from PLAN **Rubric 100** / P-ids.
 **Amended after review (2026-08-21):**
 
 1. `/health` is **not** an API Gateway mock. HTTP API (API Gateway v2) supports `MOCK` on WebSocket APIs only, so the route is an `HTTP_PROXY` to a static `health.json` on the CloudFront origin (`infra/api.tf`). Still **no Lambda**, still `200 {"ok":true}`. Cost: `/health` now depends on CloudFront being up.
-2. Fixture filenames are locked in `http.md`: `tenant-a-rag.json` and **`tenant-b-forbidden.json`** (the scratchbook Tree still says `tenant-b-pii.json` — fixed in scratchbook PR #12). Michael reads the names from `http.md`, not from PLAN.
+2. `GET /v1/traces*` carries the Cognito **ID** token, not the access token. Custom attributes live on the ID token only, so an access token reaches `vault-read` with **no** `custom:tenant_id` — and the JWT authorizer accepts it, so the gateway will not catch the mistake. Alexis: no tenant claim → `401 unauthorized`, fail closed.
+3. `TRACEVAULT_INGEST_URL` is the API **base** URL. The SDK appends `/v1/traces`; Terraform's `ingest_url` output already ends in `/v1/traces`. Wiring the output straight into the env var gives `POST .../v1/traces/v1/traces`. Use the `api_url` output. Fixed on PR #29's `infra/README.md`.
+4. Fixture filenames are locked in `http.md`: `tenant-a-rag.json` and **`tenant-b-forbidden.json`** (the scratchbook Tree still says `tenant-b-pii.json` — fixed in scratchbook PR #12). Michael reads the names from `http.md`, not from PLAN.
 
 Ingest is **not** Cognito. Read JWT `custom:tenant_id` must match stored tenant → **403** not 404. `GET /health` returns `200 {"ok":true}` with **no Lambda** (see amendment 1). CORS origin = CloudFront URL only. Two Lambdas only: `vault-ingest` → `vault.handlers.ingest.handler`, `vault-read` → `vault.handlers.read.handler`. Hour 0 fixtures are **full flights** (one `trace_id`, parent-child spans), not a single span.
 

@@ -7,8 +7,10 @@ Hour 0 lock. Do not invent a second API.
 | Surface | Auth | Who |
 |---|---|---|
 | `POST /v1/traces` | `X-Tenant-Key` only. Key → `tenant-a` or `tenant-b` via Secrets Manager. | Trevor provisions. Alexis validates and maps key → `tenant_id`. |
-| `GET /v1/traces*` | `Authorization: Bearer <Cognito access token>` | Trevor: pool, app client, hosted UI domain, callback = CloudFront URL, `custom:tenant_id`. Alexis: JWT `custom:tenant_id` must match stored tenant. Mismatch → **403** (not 404). |
+| `GET /v1/traces*` | `Authorization: Bearer <Cognito **ID** token>` | Trevor: pool, app client, hosted UI domain, callback = CloudFront URL, `custom:tenant_id`. Alexis: JWT `custom:tenant_id` must match stored tenant. Mismatch → **403** (not 404). |
 | `GET /health` | none | Trevor: **no Lambda**. HTTP API (API Gateway v2) has no `MOCK` integration type, so `/health` is an `HTTP_PROXY` route to a static `health.json` on the CloudFront origin. Body stays `{"ok":true}`. |
+
+**ID token, not access token.** Cognito puts custom attributes on the **ID** token only — a Cognito *access* token carries `sub`, `client_id`, `scope`, and `username`, but never `custom:tenant_id`. The HTTP API JWT authorizer accepts either token, so sending the wrong one does **not** fail at the gateway: it reaches `vault-read` with no tenant claim. Fail closed there (`401 unauthorized`), never open.
 
 Ingest is **not** Cognito. Users `tenant-a` and `tenant-b` have `custom:tenant_id` = username. Passwords via `TF_VAR_*`, not git. No force-change-on-first-login (judges sign in once).
 
@@ -70,3 +72,12 @@ NEXT_PUBLIC_COGNITO_DOMAIN
 ```
 
 Tokens in memory or sessionStorage. Trevor outputs these values. Michael does not hardcode URLs.
+
+### Env var semantics (SDK / demo)
+
+`TRACEVAULT_INGEST_URL` is the **API base URL**, with no path. The SDK appends `/v1/traces` itself. Terraform's `ingest_url` output is the full endpoint (it already ends in `/v1/traces`) and must **not** be fed into this variable — use the `api_url` output. Feeding `ingest_url` in produces `POST .../v1/traces/v1/traces` and a 404 on the live demo flight.
+
+| Env var | Value | Terraform output |
+|---|---|---|
+| `TRACEVAULT_INGEST_URL` | API base, no path | `api_url` |
+| `NEXT_PUBLIC_API_URL` | API base, no path | `api_url` |
