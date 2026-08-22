@@ -1,0 +1,87 @@
+{
+  "description": "tenant-b Cognito JWT requesting a tenant-a trace_id must return 403, not 404.",
+  "request": {
+    "method": "GET",
+    "path": "/v1/traces/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "authorization": "Bearer <Cognito ID token>",
+    "jwt": {
+      "username": "tenant-b",
+      "custom:tenant_id": "tenant-b"
+    }
+  },
+  "stored_tenant_id": "tenant-a",
+  "expected_status": 403,
+  "expected_body": {
+    "error": {
+      "code": "forbidden",
+      "message": "tenant mismatch"
+    }
+  },
+  "spans": [
+    {
+      "trace_id": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "span_id": "2222222222222222",
+      "parent_id": null,
+      "tenant_id": "tenant-b",
+      "kind": "http",
+      "name": "demo.ask",
+      "status": "ok",
+      "start_time": "2026-08-18T18:01:00.000Z",
+      "end_time": "2026-08-18T18:01:00.900Z",
+      "cost_usd": 0.0,
+      "attributes": { "route": "/ask" }
+    },
+    {
+      "trace_id": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "span_id": "bbbb111111111111",
+      "parent_id": "2222222222222222",
+      "tenant_id": "tenant-b",
+      "kind": "rag",
+      "name": "demo.retrieve",
+      "status": "ok",
+      "start_time": "2026-08-18T18:01:00.040Z",
+      "end_time": "2026-08-18T18:01:00.200Z",
+      "cost_usd": 0.0,
+      "prompt_preview": "User [EMAIL] asked about [SSN]",
+      "prompt_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "attributes": {
+        "rag.document_ids": ["doc-policy-02"],
+        "rag.top_k": 1
+      }
+    },
+    {
+      "trace_id": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "span_id": "bbbb333333333333",
+      "parent_id": "2222222222222222",
+      "tenant_id": "tenant-b",
+      "kind": "tool",
+      "name": "demo.get_doc_metadata",
+      "status": "ok",
+      "start_time": "2026-08-18T18:01:00.210Z",
+      "end_time": "2026-08-18T18:01:00.260Z",
+      "cost_usd": 0.0,
+      "attributes": {
+        "tool.name": "get_doc_metadata",
+        "tool.document_id": "doc-policy-02"
+      }
+    },
+    {
+      "trace_id": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "span_id": "bbbb444444444444",
+      "parent_id": "2222222222222222",
+      "tenant_id": "tenant-b",
+      "kind": "llm",
+      "name": "demo.converse",
+      "status": "ok",
+      "start_time": "2026-08-18T18:01:00.270Z",
+      "end_time": "2026-08-18T18:01:00.800Z",
+      "gen_ai.request.model": "anthropic.claude-sonnet-4-20250514-v1:0",
+      "gen_ai.usage.input_tokens": 120,
+      "gen_ai.usage.output_tokens": 40,
+      "cost_usd": 0.0021,
+      "prompt_preview": "User [EMAIL] asked about [SSN]",
+      "prompt_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "attributes": { "contains_pii": true }
+    }
+  ]
+}
