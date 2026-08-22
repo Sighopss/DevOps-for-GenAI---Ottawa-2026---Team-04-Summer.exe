@@ -39,7 +39,7 @@ Issue #56. The judge path from PLAN.md, timed and scripted, with a labelled fall
 ## Honesty callouts (say these; do not let a judge catch them)
 
 - **Bedrock is stubbed** for the demo flight (`TRACEVAULT_FAKE_BEDROCK`) — the span *shape* and redaction are real, the model call is faked to stay in budget.
-- **WAF is not in force** (WAFv2 can't attach to an HTTP API); flood protection is the in-Lambda caps + gateway throttling. Named in `docs/RED_TEAM.md`.
+- **WAF guards the Explorer, not the API.** It is attached to CloudFront and blocking (evidence in `docs/RED_TEAM.md`), but WAFv2 cannot attach to an HTTP API, so ingest flood protection is the in-Lambda caps + gateway throttling. Also: a WAF block returns `200` here, not `403`, because the distribution rewrites `403 -> /index.html` for SPA routing — don't demo it by status code.
 - **TLS floor is TLSv1** at the edge (default cert); custom-domain + ACM is the fix. Named in `docs/RED_TEAM.md`.
 
 ## Fallback recording

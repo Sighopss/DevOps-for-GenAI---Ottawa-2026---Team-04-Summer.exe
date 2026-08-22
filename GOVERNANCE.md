@@ -32,7 +32,7 @@ The material risk is **prompt persistence**. An observability tool sits directly
 | Prompt injection | Low — no privileged action exists to steer toward | Schema-only ingest, text stored inert; one read-only tool | Low |
 | Cost runaway | Low — demo-sized throttle and timeouts | API throttle, Lambda timeout, `maxTokens` 256 | Low, untested (issue #52) |
 
-Both of the top two controls are now built, tested, and demonstrated in operation (redaction fail-closed and cross-tenant 403 — `docs/RED_TEAM.md`). The remaining honest gaps are infrastructure, not vault behaviour: WAF is associated with nothing (WAFv2 cannot attach to an HTTP API, #97) and the edge TLS floor is TLSv1, so flood bounds rest on the in-Lambda caps plus API Gateway throttling.
+Both of the top two controls are now built, tested, and demonstrated in operation (redaction fail-closed and cross-tenant 403 — `docs/RED_TEAM.md`). The remaining honest gaps are infrastructure, not vault behaviour: the edge TLS floor is TLSv1 (default CloudFront certificate, #101), and WAF — now attached to CloudFront and blocking (#100) — cannot front the HTTP API, so ingest flood bounds still rest on the in-Lambda caps plus API Gateway throttling.
 
 ## 3. Data governance
 
@@ -146,7 +146,7 @@ This card describes the system as designed and, where noted, as built. Being spe
 
 - **Built, tested, and demonstrated live:** redaction (fail-closed, 115 vault tests), ingest with tenant-scoped writes, the read path, tenant-isolation 403, the audit trail, span emission, the one-tool agent, the CI security gates — the vault half verified against the deployed stack on 2026-08-22 (`docs/RED_TEAM.md`).
 - **Built and applied, but not regression-tested:** the cloud controls in Terraform. The stack was applied 2026-08-22; no automated assertion re-checks encryption, IAM scope, or the public-access block as it changes.
-- **Known not in force:** WAF (associated with nothing — WAFv2 cannot attach to an HTTP API, #97) and the TLS 1.2 floor at the edge (default CloudFront certificate).
+- **Known not in force:** the TLS 1.2 floor at the edge (default CloudFront certificate, #101). WAF is attached to CloudFront and blocking as of 2026-08-22 (#100), but it cannot front the HTTP API, so ingest is not WAF-protected.
 - **Deployed:** the API and the Explorer are live. The Explorer's live-data path still needs the API base URL baked into the web build; the fixture view works.
 
 Anything in this document phrased as running behaviour that falls into the last three categories is a requirement, not a claim. [`README.md`](README.md) **Demo integrity (P-15)** holds the authoritative built-versus-deployed table.

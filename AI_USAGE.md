@@ -34,7 +34,7 @@ Verifiable from this repo without taking anyone's word for it: feature work stil
 | Faking it | `TRACEVAULT_FAKE_BEDROCK=1` makes the demo return a canned response instead of calling Bedrock. **Every test in this repo runs this way.** If the demo is run that way, say so out loud — see **Demo integrity (P-15)** in the README |
 | IAM scope | `bedrock:InvokeModel` limited to the model ARNs generated from tfvars. No wildcard model access |
 
-The model sees only the demo prompt and the retrieved corpus text. Model output is stored the same way a prompt is — redacted at ingest, hashed and masked, TTL 7 days. That ingest path is **implemented and tested** (`vault/`, 83 tests); the read path is not, and nothing has been deployed. See **Demo integrity (P-15)** in the README for the built-versus-deployed split, and [`GOVERNANCE.md`](GOVERNANCE.md) for who owns what when it fails.
+The model sees only the demo prompt and the retrieved corpus text. Model output is stored the same way a prompt is — redacted at ingest, hashed and masked, TTL 7 days. That ingest path is **implemented and tested** (`vault/`, 115 tests), as is the read path, and both are deployed and demonstrated live (`docs/RED_TEAM.md`). See **Demo integrity (P-15)** in the README for the built-versus-deployed split, and [`GOVERNANCE.md`](GOVERNANCE.md) for who owns what when it fails.
 
 ## Not used
 
