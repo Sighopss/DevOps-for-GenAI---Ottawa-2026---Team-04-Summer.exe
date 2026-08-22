@@ -61,7 +61,8 @@ Empty = incomplete PR. Copy from PLAN **Rubric 100** / P-ids.
   - `NEXT_PUBLIC_COGNITO_CLIENT_ID`
   - `NEXT_PUBLIC_COGNITO_DOMAIN`
   - Ingest header: `X-Tenant-Key`
-  - Read header: `Authorization: Bearer <Cognito access token>`
+  - Read header: `Authorization: Bearer <Cognito ID token>`
+  - `TRACEVAULT_INGEST_URL` (API base, no path — Terraform `api_url`, not `ingest_url`)
 - tests: none on this PR (Design lock). Alexis maps 403/401/`redaction_failed` in vault tests after merge. Michael renders fixture A Day 1.
 
 ## What I need

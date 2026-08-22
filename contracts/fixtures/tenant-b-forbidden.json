@@ -3,7 +3,7 @@
   "request": {
     "method": "GET",
     "path": "/v1/traces/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-    "authorization": "Bearer <Cognito access token>",
+    "authorization": "Bearer <Cognito ID token>",
     "jwt": {
       "username": "tenant-b",
       "custom:tenant_id": "tenant-b"
