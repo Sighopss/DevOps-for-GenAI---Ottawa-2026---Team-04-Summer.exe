@@ -197,7 +197,22 @@ What we run and why. The AI *model* inventory (Bedrock ids, embeddings, inferenc
 | Secrets | AWS Secrets Manager, one secret per tenant | Ingest keys are rotatable without a deploy; a constant-time compare resolves the header, and unreadable or placeholder secrets authenticate nobody. |
 | Vault tests | `pytest` (115) + `bandit`, no AWS in unit tests | boto3 is imported lazily and tests inject boto3-shaped fakes, so the suite runs on a bare `pip install pytest bandit` — which is exactly what CI has. |
 
-*Trevor owns the remaining rows of this section (Python/uv SDK + demo-app, Next.js 15 Explorer, Terraform, AWS edge/API services, GitHub Actions + OIDC, pinned versions, SBOM and `trivy` posture) and the assembly of this section — see #55.*
+### Recorder, Explorer, edge, and delivery (Trevor)
+
+| Component | Choice | Why this one |
+|---|---|---|
+| SDK | Python 3.12, `uv`, package `tracevault` (`sdk/`) | Same language as the vault Lambdas so one span schema (`contracts/span.schema.json`) is validated in both places; `uv` keeps the toolchain pin explicit for CI and laptops. |
+| Demo flight | `demo-app/` + `scripts/demo_pii_flight.sh` | One command produces the judge flight (RAG + tool + LLM) with synthetic PII; `TRACEVAULT_FAKE_BEDROCK=1` is an explicit stub for offline runs. |
+| Explorer | Next.js 15 / React 19 / `pnpm` (`web/`), static export | Fits CloudFront+S3 without a Node server; App Router matches the Cognito-hosted sign-in callback shape Michael owns. |
+| IaC | Terraform ≥ 1.9, AWS provider ~> 5, `infra/` | One stack per env (`project-env` naming); OIDC role + two Lambdas + HTTP API + Cognito + CloudFront are declared, not click-ops. |
+| Edge / API | API Gateway HTTP API, CloudFront (TLS), Cognito, S3, DynamoDB, KMS, Secrets Manager, CloudWatch | HTTP API for cost/simplicity; CloudFront terminates TLS for the UI; Cognito carries `custom:tenant_id`; KMS for payloads; Secrets Manager for ingest keys (never in git). |
+| CI / CD | GitHub Actions + OIDC (`deploy.yml`), SHA-pinned actions | No long-lived `AKIA` in CI. `environment: dev` auto-applies; `environment: prod` requires a human reviewer (`Sighopss`). Rollback = re-run last green `deploy.yml` ([`docs/DEPLOY_GATE.md`](docs/DEPLOY_GATE.md)). |
+| Dependency posture | Pinned Actions SHAs; `uv.lock` / `pnpm-lock.yaml`; Terraform lockfile; CI `trivy` CycloneDX | Moving Action tags are rejected in CI. SBOM is a CI artifact (`sbom.cdx.json`, gitignored) — not a committed secret dump. `make sbom` reproduces locally when `trivy` is installed. |
+| Observability ops | CloudWatch log groups (7d) + `api-5xx` alarm | Evidence map and drills: [`docs/OBSERVABILITY.md`](docs/OBSERVABILITY.md). |
+
+### Assembled for #55
+
+Alexis owns vault/redaction rows above. Trevor owns recorder/Explorer/edge/CI rows and this assembly. Model-level inventory stays in [`docs/AI_INVENTORY.md`](docs/AI_INVENTORY.md) (distinct from this table).
 
 ## Limitations
 
@@ -210,6 +225,14 @@ Deliberately not built in 48h: custom domain, multi-region, PITR, CloudTrail, Gu
 - **No per-tenant ingest rate limit.** Flood damage is bounded by the in-Lambda caps — batch ≤100 spans, 1 MB body, 10k-char field, depth-32 nesting — plus API Gateway throttling and the 7-day TTL. The WAF ACL is not in force (WAFv2 cannot attach to an HTTP API — #100). *Next:* per-key usage plans, and the ACL attached to CloudFront.
 - **Retention is a flat 7 days for every tenant.** TTL is set per item at ingest, so a per-tenant policy is a configuration change rather than a redesign. *Next:* retention as a tenant attribute, plus an S3 lifecycle rule matching the DynamoDB TTL (today an expired flight's payload is unreachable, because reads resolve through the index item, but the object itself is not yet expired).
 - **Audit records reads, not exports.** Every trace open writes an actor/tenant/trace/timestamp row. There is no separate event for "an operator copied this off-screen" — that is outside what an API can observe.
+
+### Recorder / edge — known limits and where they go next
+
+- **Default CloudFront certificate pins a TLSv1 floor.** Viewer `minimum_protocol_version = TLSv1.2_2021` is ignored while `cloudfront_default_certificate = true` (#101). *Next:* custom domain + ACM in `us-east-1` so TLS 1.2 is actually enforced.
+- **WAF WebACL is not attached to CloudFront yet.** Flood control today is API Gateway throttling + in-Lambda caps (#100, Alexis apply from a clean machine). *Next:* associate the ACL to the distribution and keep a sampled allow/block proof.
+- **`deploy.yml` on `main` has been red since mid-day 2026-08-22.** Root causes seen: Action setup flakiness and `web-sync` reading Terraform outputs without a successful apply. Rollback control still works; ancient greens are unsafe once workflow secrets/vars move ([`docs/DEPLOY_GATE.md`](docs/DEPLOY_GATE.md)). *Next:* restore a green apply on current `main`, then treat that run as the rollback target.
+- **Explorer is built, not published.** `web/` is on `main`; the web bucket still lacks a full sync, so CloudFront `/` is not the product UI yet. *Next:* green `web-sync` (or a one-shot sync) after apply outputs are healthy.
+- **SDK fallback is not the product.** Unset or unreachable ingest writes `sdk/.last-flight.json` and does not crash (#49). *Next:* keep that as a laptop/demo safety net only — judges see live ingest for the scored path.
 
 ## License
 

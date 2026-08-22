@@ -61,12 +61,23 @@ class TraceVaultClient:
 
     def flush(self) -> None:
         if not self.ingest_url:
-            _LAST_FLIGHT.write_text(
-                json.dumps(self.spans, indent=2) + "\n",
-                encoding="utf-8",
-            )
+            self._write_last_flight()
             return
-        self._post_with_retry()
+        try:
+            self._post_with_retry()
+        except IngestError as err:
+            # Unreachable ingest (network / timeout): park the flight locally.
+            # HTTP 4xx/5xx still raise — the server was reachable.
+            if err.status_code == 0:
+                self._write_last_flight()
+                return
+            raise
+
+    def _write_last_flight(self) -> None:
+        _LAST_FLIGHT.write_text(
+            json.dumps(self.spans, indent=2) + "\n",
+            encoding="utf-8",
+        )
 
     def _post_with_retry(self) -> None:
         url = self.ingest_url.rstrip("/") + "/v1/traces"
