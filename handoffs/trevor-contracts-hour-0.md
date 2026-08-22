@@ -44,11 +44,12 @@ Empty = incomplete PR. Copy from PLAN **Rubric 100** / P-ids.
 - Rubric rows (pts): `Engineering 15` (one schema, two Lambdas, HTTP freeze), `Security 15` (403 not 404, fail-closed `redaction_failed`, ingest key ≠ JWT)
 - Tests / attack shown: Fixtures only (no lane tests yet). Documented attack: tenant-b JWT + tenant-a `trace_id` → `403` `forbidden` / `tenant mismatch`. Fixtures contain **no** raw email/SSN (masked `[EMAIL]` / `[SSN]` + `prompt_hash`).
 - Stub/live (P-15): **Stub.** Explorer Day 1 uses these full-flight fixtures. Live `GET /v1/traces*` is Day 2.
+- Judge bar (`JUDGE.md`): never-kill intact — redaction, **403 not 404**, HTTPS URL, fixture UI (Day 1), `/health`, CORS = CloudFront only, JWT `custom:tenant_id`, one retrieve tool, ingest key ≠ user JWT. `/health` **implementation** amended (see below); the judged outcome (`200 {"ok":true}`, no Lambda) is unchanged.
 
 ## What I shipped
 
 - files:
-  - `contracts/http.md` — HTTP + auth (ingest `X-Tenant-Key`, read JWT `custom:tenant_id`, `/health` mock, CORS CloudFront-only, error envelope, two Lambdas, `NEXT_PUBLIC_*`)
+  - `contracts/http.md` — HTTP + auth (ingest `X-Tenant-Key`, read JWT `custom:tenant_id`, `/health`, CORS CloudFront-only, error envelope, two Lambdas, `NEXT_PUBLIC_*`, locked fixture names)
   - `contracts/span.schema.json` — TraceVaultSpan JSON Schema 2020-12
   - `contracts/fixtures/tenant-a-rag.json` — one `trace_id`, four spans (`http` root `demo.ask` → `rag` / `tool` / `llm`)
   - `contracts/fixtures/tenant-b-forbidden.json` — tenant-b full flight + 403 example against tenant-a `trace_id`
@@ -77,7 +78,12 @@ Empty = incomplete PR. Copy from PLAN **Rubric 100** / P-ids.
 
 ## Contract reminder
 
-Ingest is **not** Cognito. Read JWT `custom:tenant_id` must match stored tenant → **403** not 404. `GET /health` is an API Gateway mock (no Lambda). CORS origin = CloudFront URL only. Two Lambdas only: `vault-ingest` → `vault.handlers.ingest.handler`, `vault-read` → `vault.handlers.read.handler`. Hour 0 fixtures are **full flights** (one `trace_id`, parent-child spans), not a single span.
+**Amended after review (2026-08-21):**
+
+1. `/health` is **not** an API Gateway mock. HTTP API (API Gateway v2) supports `MOCK` on WebSocket APIs only, so the route is an `HTTP_PROXY` to a static `health.json` on the CloudFront origin (`infra/api.tf`). Still **no Lambda**, still `200 {"ok":true}`. Cost: `/health` now depends on CloudFront being up.
+2. Fixture filenames are locked in `http.md`: `tenant-a-rag.json` and **`tenant-b-forbidden.json`** (the scratchbook Tree still says `tenant-b-pii.json` — fixed in scratchbook PR #12). Michael reads the names from `http.md`, not from PLAN.
+
+Ingest is **not** Cognito. Read JWT `custom:tenant_id` must match stored tenant → **403** not 404. `GET /health` returns `200 {"ok":true}` with **no Lambda** (see amendment 1). CORS origin = CloudFront URL only. Two Lambdas only: `vault-ingest` → `vault.handlers.ingest.handler`, `vault-read` → `vault.handlers.read.handler`. Hour 0 fixtures are **full flights** (one `trace_id`, parent-child spans), not a single span.
 
 ## Pickup prompt (paste into the other LLM)
 

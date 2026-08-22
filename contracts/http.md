@@ -8,7 +8,7 @@ Hour 0 lock. Do not invent a second API.
 |---|---|---|
 | `POST /v1/traces` | `X-Tenant-Key` only. Key → `tenant-a` or `tenant-b` via Secrets Manager. | Trevor provisions. Alexis validates and maps key → `tenant_id`. |
 | `GET /v1/traces*` | `Authorization: Bearer <Cognito access token>` | Trevor: pool, app client, hosted UI domain, callback = CloudFront URL, `custom:tenant_id`. Alexis: JWT `custom:tenant_id` must match stored tenant. Mismatch → **403** (not 404). |
-| `GET /health` | none | Trevor: API Gateway mock. No Lambda. |
+| `GET /health` | none | Trevor: **no Lambda**. HTTP API (API Gateway v2) has no `MOCK` integration type, so `/health` is an `HTTP_PROXY` route to a static `health.json` on the CloudFront origin. Body stays `{"ok":true}`. |
 
 Ingest is **not** Cognito. Users `tenant-a` and `tenant-b` have `custom:tenant_id` = username. Passwords via `TF_VAR_*`, not git. No force-change-on-first-login (judges sign in once).
 
@@ -24,7 +24,7 @@ Ingest is **not** Cognito. Users `tenant-a` and `tenant-b` have `custom:tenant_i
 
 | Method | Path | Auth | Code | AWS | Success |
 |---|---|---|---|---|---|
-| `GET` | `/health` | none | — | Trevor mock | `200 {"ok":true}` |
+| `GET` | `/health` | none | — | Trevor `HTTP_PROXY` → `health.json` (no Lambda) | `200 {"ok":true}` |
 | `POST` | `/v1/traces` | tenant key | Alexis ingest→redact→store | `vault-ingest` | `202 {"accepted":true,"trace_id":"<id>"}` |
 | `GET` | `/v1/traces?limit=50` | JWT | Alexis read | `vault-read` | `200 {"flights":[...]}` |
 | `GET` | `/v1/traces/{trace_id}` | JWT | Alexis read | `vault-read` | `200 {"trace_id","tenant_id","expires_at","spans":[...]}` |
@@ -34,6 +34,17 @@ Ingest is **not** Cognito. Users `tenant-a` and `tenant-b` have `custom:tenant_i
 List `flights[]`: `trace_id`, `tenant_id`, `start_time`, `end_time`, `cost_usd`, `status`, `prompt_preview`. Tenant-scoped from JWT. `limit` max 50. Get spans = span schema. Audit GET also **writes** a row.
 
 `POST /v1/traces` body is `{ "spans": [ TraceVaultSpan, ... ] }`.
+
+### Fixtures (locked names)
+
+Day 1 Explorer reads these; do not rename them.
+
+| File | What |
+|---|---|
+| `contracts/fixtures/tenant-a-rag.json` | tenant-a full flight — one `trace_id`, four spans (`http` root `demo.ask` → `rag` / `tool` / `llm`) |
+| `contracts/fixtures/tenant-b-forbidden.json` | tenant-b full flight **plus** the 403 example against a tenant-a `trace_id` |
+
+Both carry masked `prompt_preview` (`[EMAIL]` / `[SSN]`) + `prompt_hash`. No raw PII.
 
 ### CORS (Trevor)
 
