@@ -28,15 +28,41 @@ Everything a reviewer needs is in this repository. Nothing required to evaluate 
 
 | Artifact | Where | Status |
 |---|---|---|
-| Architecture + data flow | `README.md` | in progress |
-| Threat model + trust boundaries | `SECURITY.md` | in progress |
-| Governance / AI system card | `GOVERNANCE.md` | in progress |
+| Architecture + data flow | [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) | present |
+| Threat model + trust boundaries | [`SECURITY.md`](SECURITY.md) | present |
+| Governance / AI system card | [`GOVERNANCE.md`](GOVERNANCE.md) | present |
+| AI supply chain inventory | [`docs/AI_INVENTORY.md`](docs/AI_INVENTORY.md) | present |
 | AI usage disclosure | [`AI_USAGE.md`](AI_USAGE.md) | present |
 | Data classification + abuse cases | `docs/DATA_AND_ABUSE.md` | in progress |
 | Runbook | `make help` | present |
 | Frozen HTTP + span contract | `contracts/` | present |
 
 Items marked in progress have open issues against them; the tracking issue for the full submission checklist is pinned.
+
+## Lineage — what this builds on
+
+TraceVault is not a greenfield idea. It is a direct response to the AI-observability projects from the two 2025 Canada DevOps Community of Practice hackathons, and the organizers' brief for 2026 asks teams to continue from that work. This section records what we took, what we left, and the gap we exist to close. It is prior-art attribution, not a claim to have shipped their features.
+
+The Ottawa 2025 winner, [`AICommunityofPractice_Observability`](https://github.com/CanadaDevOpsCommunity2025/AICommunityofPractice_Observability), is an umbrella repository that aggregates three projects as submodules. Our theme is the same theme it won on, so it is the branch of the lineage we sit on.
+
+| Prior project | What we took | What we deliberately did not take |
+|---|---|---|
+| [InnerAI](https://github.com/CanadaDevOpsCommunity2025/AIObservability-Monitoring_InnerAI) (Ottawa, observability umbrella) | The core shape: an SDK wraps the model call and emits spans. A four-way split of emit / store / view / demo user. | Plaintext prompt storage. Localhost-only operation. No tenants. |
+| [InsightAI_Minions](https://github.com/CanadaDevOpsCommunity2025/InsightAI_Minions) (Ottawa, observability umbrella) | OpenTelemetry `gen_ai.*` attribute naming, which our span schema uses. CI that deploys the thing judges actually click, not only infrastructure. | Grafana as the product surface. SSH-based deploys. |
+| [GenA11yHelper](https://github.com/CanadaDevOpsCommunity2025/GenA11yHelper) (Ottawa, observability umbrella) | Terraform from hour zero. A public URL as a first-class deliverable. Deliberately small scope. | EC2 with port 22. Long-lived `AKIA` access keys. Deploy on every push. |
+| [Vulnerability-Resolution-Agent](https://github.com/CanadaDevOpsCommunity2025/Vulnerability-Resolution-Agent) (Toronto winner) | Security proven by a test a judge can watch fail, not by assertion — their HMAC verification suite is the pattern behind our tenant-key and cross-tenant tests. An ingest path isolated from the read path. | The `ngrok` tunnel and IDE-coupled MCP/SSE transport. A datastore with no tenant isolation. |
+| [HemoStat](https://github.com/CanadaDevOpsCommunity2025/HemoStat) (Toronto, Impactful) | Freezing the wire contract before lane code — their `docs/API_PROTOCOL.md` is why `contracts/http.md` exists at hour zero. One package per person. `uv` plus a Makefile whose targets skip cleanly when a directory is absent. | Streamlit. Prometheus and Grafana provisioning. Autonomous remediation of live systems. |
+
+### The gap we exist to close
+
+Across the prior work, safe storage of observability data is treated as something you could add later rather than a property of the design. Three concrete instances, from their own documentation and code: InnerAI persisted raw prompts. HemoStat's audit trail carries whatever the emitting event contained, with no redaction step on the way in. VRA's datastore has no tenant boundary. We are not claiming to have audited every line of all five projects — these are the specific, checkable gaps that motivated our design.
+
+TraceVault's contribution is to make two properties structural rather than optional:
+
+- **Write-time redaction, fail-closed.** The raw prompt is masked and hashed before anything is persisted. If redaction cannot complete, ingest returns `400 redaction_failed` and stores **nothing** — the failure mode is data loss, never a leak. **Implemented and tested** (`vault/`, 83 tests).
+- **Tenant isolation that returns 403, not 404.** A cross-tenant read is refused as forbidden rather than hidden as missing, so the boundary is observable and testable instead of silently indistinguishable from an empty result. **Contracted, not yet implemented** — see **Demo integrity (P-15)** below.
+
+Both are frozen in [`contracts/`](contracts/). [`SECURITY.md`](SECURITY.md) maps each to the test that proves it, or states that it is not covered.
 
 ## Team
 
@@ -103,19 +129,29 @@ Stated plainly, because undisclosed mocks are a handbook red flag. Three differe
 - **Built** — code exists in this repo. Note what is on `main` versus still on an open PR.
 - **Deployed** — running on AWS at a public URL.
 
-**As of this commit, nothing is deployed.** No `terraform apply` has run, `deploy.yml` has not run, and there is no public URL — which is why the **Public URL** line above still says TBD. `main` currently holds only this README, `AI_USAGE.md`, the handoff templates, and `LICENSE`; every lane below is on an open PR awaiting Trevor's merge, or not started.
+**As of this commit, nothing is deployed.** No `terraform apply` has run, `deploy.yml` has not run, and there is no public URL — which is why the **Public URL** line above still says TBD. Every lane except Michael's `web/` is now merged to `main` and its tests pass locally; what none of it has is a running environment.
+
+Verify the built column yourself:
+
+```bash
+py -m pytest vault -q                                        # 83 passed
+cd sdk && uv run pytest -q                                   # 3 passed
+cd demo-app && TRACEVAULT_FAKE_BEDROCK=1 uv run pytest -q     # 2 passed
+```
 
 | Piece | Contracted | Built | Deployed | What that means today |
 |---|---|---|---|---|
-| CloudFront, Cognito, HTTP API, KMS, DynamoDB, S3 | Yes | Terraform written, open PR (Trevor) | **No** | Terraform exists but has never been applied. There is no live infrastructure and no URL yet. |
-| Redaction on ingest (Presidio + deny-list) | Yes — `contracts/http.md` | **No — not yet implemented** | **No** | `vault/` does not exist in this repo. Alexis's lane has not landed and has no open PR. Fail-closed `redaction_failed` with nothing stored is the **contracted** behaviour once it lands — it is not running now, and nothing has been redacted by this product yet. |
-| Ingest and read API (`POST /v1/traces`, `GET /v1/traces*`, audit, 403) | Yes — `contracts/http.md` | **No — not yet implemented** | **No** | Same lane as the row above: both Lambdas are Alexis's `vault/`. The routes are frozen and the error JSON is agreed; no handler code exists yet. |
-| Bedrock model call | Yes | Demo written, open PR (Trevor) | **No** | When it runs, it is a real Bedrock call **unless** `TRACEVAULT_FAKE_BEDROCK=1`, which returns a canned response. If we demo with that set, we say so out loud. |
-| Explorer, Day 1 (fixtures) | Yes — `contracts/fixtures/` | **No — not yet implemented** | **No** | `web/` does not exist in this repo. Michael's lane has not landed. The fixtures it is meant to render (`tenant-a-rag.json`, `tenant-b-forbidden.json`) **are** committed under `contracts/fixtures/`; there is no UI rendering them yet. |
-| Explorer, Day 2 (live data) | Yes | **No** | **No** | Depends on both `web/` and `vault/`. Neither exists. This is the plan for Day 2, not a current capability. |
-| Ingest URL unset | Yes | Yes — SDK written, open PR (Trevor) | n/a | Accurate as written: with `TRACEVAULT_INGEST_URL` unset the SDK does **not** POST — it writes `sdk/.last-flight.json` locally and does not crash. That local file is a fallback, **not** the product. |
+| CloudFront, Cognito, HTTP API, KMS, DynamoDB, S3 | Yes | Yes — `infra/` on `main`, `terraform validate` passes | **No** | Terraform is merged but has **never been applied**. No live infrastructure, no URL. Every cloud control is reviewable in source and unverified in practice. |
+| Redaction on ingest (deny-list, Presidio optional) | Yes — `contracts/http.md` | **Yes** — `vault/redact/` + re-applied in `vault/ingest/` | **No** | Implemented and tested: fail-closed `redaction_failed` stores nothing, adversarial suite included. Presidio is optional and **absent in CI**, so the tested guarantee is deny-list-driven. Nothing has been redacted in production because there is no production. |
+| Ingest API (`POST /v1/traces`) | Yes — `contracts/http.md` | **Yes** — `vault/handlers/ingest.py` | **No** | Tenant-key auth, schema validation, tenant-scoped writes, S3-then-Dynamo commit order. Runs against injected fakes in tests, never against real AWS. |
+| Read + audit API (`GET /v1/traces*`, 403, audit rows) | Yes — `contracts/http.md` | **No — not yet implemented** | **No** | `vault/read/`, `vault/audit/`, `vault/handlers/read.py` do not exist (issues #15, #16, #18). **403-not-404 has no code and no test.** The error envelope is frozen and `vault/errors.py` emits the exact contracted `forbidden` body, but nothing calls it. This is the biggest open gap. |
+| Bedrock model call | Yes | Yes — `demo-app/` on `main` | **No** | A real Bedrock call **unless** `TRACEVAULT_FAKE_BEDROCK=1`, which returns a canned response. Every test to date has used the fake. If we demo with it set, we say so out loud. The embedding model is not yet in the IAM allowlist — see [`docs/AI_INVENTORY.md`](docs/AI_INVENTORY.md). |
+| Span emission (SDK) | Yes — `contracts/span.schema.json` | Yes — `sdk/` on `main` | **No** | Emits schema-shaped spans with masked preview + `prompt_hash`. |
+| Explorer, Day 1 (fixtures) | Yes — `contracts/fixtures/` | **No — not yet implemented** | **No** | `web/` does not exist. The fixtures it should render (`tenant-a-rag.json`, `tenant-b-forbidden.json`) **are** committed; there is no UI rendering them. |
+| Explorer, Day 2 (live data) | Yes | **No** | **No** | Needs both `web/` and the read handler. Neither exists. |
+| Ingest URL unset | Yes | Yes — `sdk/` on `main` | n/a | With `TRACEVAULT_INGEST_URL` unset the SDK does **not** POST — it writes `sdk/.last-flight.json` locally and does not crash. That local file is a fallback, **not** the product. |
 
-Demo data is **synthetic** PII only. The privacy properties this product is built to have — raw prompts never persisted, only `prompt_hash` plus a masked `prompt_preview`, DynamoDB TTL 7 days, Lambda logs 7 days — are contracted and are the bar the `vault/` tests must prove. They are not yet demonstrated by running code, and this README will not claim they are until that code lands and is deployed.
+Demo data is **synthetic** PII only. The privacy properties this product is built to have — raw prompts never persisted, only `prompt_hash` plus a masked `prompt_preview`, DynamoDB TTL 7 days, Lambda logs 7 days — are implemented and tested for the ingest path; the retention values are configured in Terraform and unverified until an apply. Tenant isolation is contracted only. [`SECURITY.md`](SECURITY.md) maps every threat to the test that proves it, or says plainly that it is not covered.
 
 ## AI transparency
 
