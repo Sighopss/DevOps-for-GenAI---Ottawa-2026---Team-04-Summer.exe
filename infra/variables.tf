@@ -29,10 +29,11 @@ variable "github_repository" {
 
 variable "bedrock_model_ids" {
   type        = list(string)
-  description = "Bedrock foundation model ids the OIDC role may invoke. Not *."
+  description = "Bedrock foundation model ids the OIDC role may invoke (converse + embeddings). Not *."
   default = [
     "anthropic.claude-3-5-sonnet-20241022-v2:0",
     "amazon.nova-lite-v1:0",
+    "amazon.titan-embed-text-v2:0",
   ]
 }
 
