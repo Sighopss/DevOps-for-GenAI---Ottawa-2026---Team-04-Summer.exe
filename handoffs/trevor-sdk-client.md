@@ -43,6 +43,7 @@ assets/
 - Rubric rows (pts): Engineering 15
 - Tests / attack shown: golden required keys; http→rag+llm nesting (same `trace_id`, `parent_id`); `sensitive=True` prompt with email+SSN never appears in logs/stdout/`prompt_preview`
 - Stub/live (P-15): unit tests only; no Bedrock; ingest unset → `sdk/.last-flight.json` (live POST when `TRACEVAULT_INGEST_URL` is set)
+- Judge bar (`JUDGE.md`): never-kill intact for the two items this lane can touch. **Redaction** — the raw prompt never leaves the process: `Span.finish` emits `prompt_hash` (sha256) plus a masked `prompt_preview` (`[EMAIL]` / `[SSN]`, ≤200 chars) and only when `sensitive=True`, drops its prompt reference on close, and `tests/test_no_raw_log.py` asserts the email and SSN appear in neither stdout, logs, nor the preview. The offline `.last-flight.json` holds the same masked spans and is gitignored, so nothing raw reaches git either. This preview is a **hint**, not the authority — Alexis's ingest redaction stays the fail-closed gate. **Ingest key ≠ user JWT** — the client sends `X-Tenant-Key` (`TRACEVAULT_TENANT_KEY`) and nothing else; there is no `Authorization` header and no Cognito code path in `sdk/`. The other never-kills (403 not 404, HTTPS URL, fixture UI, `/health`, CORS, JWT `custom:tenant_id`, one retrieve tool) have no surface in this PR.
 
 ## What I shipped
 
