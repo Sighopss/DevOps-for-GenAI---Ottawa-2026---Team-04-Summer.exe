@@ -6,7 +6,11 @@ requires-python = ">=3.12"
 dependencies = [
     "boto3",
     "pydantic>=2",
+    "tracevault",
 ]
+
+[tool.uv.sources]
+tracevault = { path = "../sdk", editable = true }
 
 [project.optional-dependencies]
 dev = ["pytest"]
@@ -25,9 +29,3 @@ where = ["src"]
 pythonpath = ["src"]
 testpaths = ["tests"]
 addopts = "-q"
-
-# After trevor-sdk (#28) merges onto main, add:
-#   [project.optional-dependencies]
-#   sdk = ["tracevault"]
-#   [tool.uv.sources]
-#   tracevault = { path = "../sdk", editable = true }
