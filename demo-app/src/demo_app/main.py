@@ -94,8 +94,10 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
     if args.pii:
         log.info("running with --pii (prompt not logged)")
-    answer, _spans = run(question=args.question, tenant_id=args.tenant, pii=args.pii)
+    answer, spans = run(question=args.question, tenant_id=args.tenant, pii=args.pii)
     print(answer)
+    if spans:
+        log.info("trace_id=%s", spans[0].get("trace_id", ""))
     return 0
 
 
