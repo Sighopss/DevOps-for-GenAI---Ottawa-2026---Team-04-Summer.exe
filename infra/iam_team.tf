@@ -134,6 +134,32 @@ data "aws_iam_policy_document" "vault_lane" {
       "${aws_cloudwatch_log_group.read.arn}:*",
     ]
   }
+
+  # Same scoped invoke allowlist as the GHA OIDC role (local.bedrock_model_arns).
+  # Lets Alexis smoke live demo-app Bedrock without sharing Trevor's admin key.
+  # PutFoundationModelEntitlement is retired (auto model access); do not grant *.
+  # ListFoundationModels stays on ReadOnlyAccess (AWS list APIs require Resource *).
+  statement {
+    sid    = "BedrockInvokeScoped"
+    effect = "Allow"
+    actions = [
+      "bedrock:InvokeModel",
+      "bedrock:InvokeModelWithResponseStream",
+    ]
+    resources = local.bedrock_model_arns
+  }
+
+  statement {
+    sid    = "BedrockGetFoundationModel"
+    effect = "Allow"
+    actions = [
+      "bedrock:GetFoundationModel",
+    ]
+    resources = [
+      for id in var.bedrock_model_ids :
+      "arn:${local.partition}:bedrock:${var.aws_region}::foundation-model/${id}"
+    ]
+  }
 }
 
 resource "aws_iam_policy" "vault_lane" {
