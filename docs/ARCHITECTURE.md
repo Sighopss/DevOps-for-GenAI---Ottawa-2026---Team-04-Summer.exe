@@ -13,12 +13,12 @@ flowchart LR
     end
 
     subgraph edge["AWS edge — HTTPS only"]
-        cf["CloudFront<br/>redirect-to-https, TLS 1.2_2021<br/>OAC, CSP + HSTS"]
+        cf["CloudFront<br/>redirect-to-https<br/>OAC, CSP + HSTS<br/>TLS min TLSv1 (default cert)"]
         cog["Cognito hosted UI<br/>tenant-a / tenant-b<br/>custom:tenant_id"]
     end
 
-    subgraph api["HTTP API (API Gateway v2) + WAF"]
-        waf["WAF<br/>AWSManagedRulesCommonRuleSet"]
+    subgraph api["HTTP API (API Gateway v2)"]
+        waf["WAF web ACL<br/>AWSManagedRulesCommonRuleSet<br/>NOT associated — WAFv2<br/>cannot attach to an HTTP API"]
         health["GET /health<br/>HTTP_PROXY, no Lambda"]
         rpost["POST /v1/traces<br/>authorization_type = NONE"]
         rget["GET /v1/traces*<br/>JWT authorizer"]
