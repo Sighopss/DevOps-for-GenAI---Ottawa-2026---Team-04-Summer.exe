@@ -27,6 +27,9 @@ _DEFAULT_TTL_DAYS = 7
 # Free-text span fields masked in place (str values only; None passes).
 _TEXT_FIELDS = ("name", "error_message", "prompt_preview")
 
+# Attributes deeper than this are a nesting bomb, not telemetry (issue #46).
+_MAX_DEPTH = 32
+
 
 def _masked(text: str) -> str:
     result = redact(text)
@@ -35,14 +38,16 @@ def _masked(text: str) -> str:
     return result.prompt_preview
 
 
-def _redact_value(value):
+def _redact_value(value, depth: int = 0):
     """Recursively mask strings inside attributes/events structures."""
+    if depth > _MAX_DEPTH:
+        raise RedactionError("attributes nested too deeply")
     if isinstance(value, str):
         return _masked(value)
     if isinstance(value, dict):
-        return {key: _redact_value(item) for key, item in value.items()}
+        return {key: _redact_value(item, depth + 1) for key, item in value.items()}
     if isinstance(value, list):
-        return [_redact_value(item) for item in value]
+        return [_redact_value(item, depth + 1) for item in value]
     return value  # numbers / bools / None carry no text
 
 

@@ -15,6 +15,9 @@ from vault.store import FlightStore
 
 _store = None
 
+# API Gateway caps payloads well above this; anything near it is hostile.
+_MAX_BODY_BYTES = 1_000_000
+
 
 def _get_store() -> FlightStore:
     global _store
@@ -32,9 +35,13 @@ def _parse_body(event: dict):
             raw = base64.b64decode(raw).decode("utf-8")
         except Exception:
             return None
+    if isinstance(raw, str) and len(raw) > _MAX_BODY_BYTES:
+        return None
     try:
+        # RecursionError: a nesting bomb must be a 400, not an unhandled 500
+        # (issue #46).
         return json.loads(raw)
-    except (TypeError, ValueError):
+    except (TypeError, ValueError, RecursionError):
         return None
 
 

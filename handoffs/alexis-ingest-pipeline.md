@@ -61,3 +61,7 @@ Do not edit the claimed paths above.
 Continue your own mission using What I shipped.
 Do not merge to main — Trevor merges.
 ```
+
+## Amendment (same day)
+
+Issue #45 fixes landed on the base branch (deny-list lookarounds, key adjacency, redact input cap). Issue #46 hardening landed here: RecursionError from JSON nesting bombs -> 400 `invalid`; 1MB body cap -> 400 `invalid`; attributes deeper than 32 levels -> 400 `redaction_failed`; oversized single strings fail closed via the redact cap; injection strings stored inert. Adversarial suite: `vault/tests/ingest/test_adversarial.py`. 83 tests total.
