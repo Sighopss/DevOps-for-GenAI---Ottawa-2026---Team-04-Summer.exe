@@ -5,7 +5,7 @@
 - Agent id: `michael-m7`
 - Branch: `michael/flight-explorer-fixtures`
 - PR: `#88`
-- Mission / scope: Finish Michael's follow-up explorer work after the fixture PR: commit `PRODUCT.md` and `DESIGN.md`, wire live `GET /v1/traces*` + audit into `web/`, harden tenant switching and forbidden UI, extend Playwright for fixture/live/error-state coverage, and append Michael's AI usage disclosure.
+- Mission / scope: Finish Michael's follow-up explorer work after the fixture PR: commit `PRODUCT.md` and `DESIGN.md`, wire live `GET /v1/traces*` + audit into `web/`, harden tenant switching and forbidden UI, align hosted Cognito sign-in with the live `code` flow + root callback, extend Playwright for fixture/live/error-state coverage, and append Michael's AI usage disclosure.
 
 ## Claimed paths (collision)
 
@@ -48,7 +48,7 @@ Trevor docs, infra, and CODEOWNERS PRs. Alexis vault/read/audit tests and docs. 
 
 - files: `PRODUCT.md`, `DESIGN.md`, `AI_USAGE.md`, `web/` source, tests, and config
 - outputs / env **names** (no secret values): `NEXT_PUBLIC_API_URL`, `NEXT_PUBLIC_COGNITO_REGION`, `NEXT_PUBLIC_COGNITO_USER_POOL_ID`, `NEXT_PUBLIC_COGNITO_CLIENT_ID`, `NEXT_PUBLIC_COGNITO_DOMAIN`
-- tests: fixture render, tenant-b Day 1 honesty + locked 403 contract path, live operator detail/error span path, live tenant-b forbidden read through mocked `GET /v1/traces*`, trace-not-found UI, and API-unreachable UI
+- tests: fixture render, tenant-b Day 1 honesty + locked 403 contract path, live operator detail/error span path, live tenant-b forbidden read through mocked `GET /v1/traces*`, trace-not-found UI, API-unreachable UI, and hosted Cognito code callback into the live Explorer path
 
 ## What I need
 
@@ -61,7 +61,7 @@ Trevor docs, infra, and CODEOWNERS PRs. Alexis vault/read/audit tests and docs. 
 
 ## Contract reminder
 
-Keep detail on `?trace_id=` only. Day 1 must stay honest about fixture-only data. Day 2 live reads stay on `GET /v1/traces*` and `GET /v1/traces/{trace_id}/audit` with Cognito ID token handling and repo-owned env names only. Do not mirror product copy into `README.md` until Trevor's overlapping docs PR is resolved.
+Keep detail on `?trace_id=` only. Day 1 must stay honest about fixture-only data. Day 2 live reads stay on `GET /v1/traces*` and `GET /v1/traces/{trace_id}/audit` with Cognito ID token handling and repo-owned env names only. Hosted sign-in now matches the current Cognito app client by using the `code` flow and the root callback URL, then forwarding into `/explorer`. Do not mirror product copy into `README.md` until Trevor's overlapping docs PR is resolved.
 
 ## Pickup prompt (paste into the other LLM)
 
