@@ -1,0 +1,51 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://tracevault.dev/schemas/span.json",
+  "title": "TraceVaultSpan",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "trace_id",
+    "span_id",
+    "tenant_id",
+    "kind",
+    "name",
+    "status",
+    "start_time",
+    "end_time"
+  ],
+  "properties": {
+    "trace_id": { "type": "string", "minLength": 16, "maxLength": 64 },
+    "span_id": { "type": "string", "minLength": 8, "maxLength": 32 },
+    "parent_id": { "type": ["string", "null"] },
+    "tenant_id": { "type": "string", "enum": ["tenant-a", "tenant-b"] },
+    "kind": { "type": "string", "enum": ["llm", "tool", "rag", "http"] },
+    "name": { "type": "string", "minLength": 1, "maxLength": 128 },
+    "status": { "type": "string", "enum": ["ok", "error"] },
+    "start_time": { "type": "string", "format": "date-time" },
+    "end_time": { "type": "string", "format": "date-time" },
+    "gen_ai.request.model": { "type": "string" },
+    "gen_ai.usage.input_tokens": { "type": "integer", "minimum": 0 },
+    "gen_ai.usage.output_tokens": { "type": "integer", "minimum": 0 },
+    "cost_usd": { "type": "number", "minimum": 0 },
+    "error_message": { "type": ["string", "null"] },
+    "attributes": {
+      "type": "object",
+      "additionalProperties": true
+    },
+    "events": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["name", "timestamp"],
+        "properties": {
+          "name": { "type": "string" },
+          "timestamp": { "type": "string", "format": "date-time" },
+          "attributes": { "type": "object" }
+        }
+      }
+    },
+    "prompt_preview": { "type": "string", "maxLength": 200 },
+    "prompt_hash": { "type": "string", "pattern": "^[a-f0-9]{64}$" }
+  }
+}
