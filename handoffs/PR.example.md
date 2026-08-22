@@ -1,13 +1,13 @@
 # Handoff — `<your-name>-<id>` — `<slug>`
 
-> **In-tree template for agents working in this product repo.** The canonical version of this file, plus [`PLAN.md`](https://github.com/Sighopss/TVault-scratchbook-accessible/blob/main/PLAN.md) and [`JUDGE.md`](https://github.com/Sighopss/TVault-scratchbook-accessible/blob/main/JUDGE.md), live in the scratchbook at https://github.com/Sighopss/TVault-scratchbook-accessible and must **not** be duplicated into this repo.
+> **Handoff template.** Copy this to `handoffs/<your-name>-<id>-<slug>.md` on your branch and paste the same text into the PR body.
 
 - Date:
 - Human: `<Trevor|Alexis|Michael>`
 - Agent id: `<your-name>-<id>`
 - Branch: `<your-name>/<id>/<slug>`
 - PR: `<number or TBD>`
-- Mission file: `skills/<your-lane>/agents/<id>.md` (in the scratchbook — not in this repo)
+- Mission / scope:
 
 ## Claimed paths (collision)
 
@@ -29,7 +29,7 @@ Agents whose claimed paths do **not** overlap this list. Name them if you know (
 
 ## Handbook evidence (required — 2026 workbook)
 
-Empty = incomplete PR. Copy from PLAN **Rubric 100** / P-ids ([`PLAN.md`](https://github.com/Sighopss/TVault-scratchbook-accessible/blob/main/PLAN.md), section **Handbook (2026)**).
+Empty = incomplete PR. Name the lifecycle stage, the handbook P-ids, and the rubric rows this PR moves.
 
 - Lifecycle stage: `<Discover|Design|Build|Validate|Deploy|Operate|Govern>`
 - P-ids this PR moves: `<e.g. P-09, P-13>`
@@ -60,8 +60,7 @@ Empty = incomplete PR. Copy from PLAN **Rubric 100** / P-ids ([`PLAN.md`](https:
 ## Pickup prompt (paste into the other LLM)
 
 ```
-Read this handoff, then scratchbook PLAN.md and JUDGE.md
-(https://github.com/Sighopss/TVault-scratchbook-accessible).
+Read this handoff and the ownership table in README.md.
 Do not edit the claimed paths above.
 Continue your own mission using What I shipped.
 Do not merge to main — Trevor merges.

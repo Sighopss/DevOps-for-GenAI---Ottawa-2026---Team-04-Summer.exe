@@ -2,7 +2,7 @@
 
 **What this is:** the honest record of which AI tools each human on Team Summer.exe used to build TraceVault, what those tools produced, and how a human reviewed it. It also names the model the **product itself** calls at runtime.
 
-**Handbook item:** P-06 (AI transparency). It is also the evidence behind the rubric row *Team & AI-tool (5)* — feature PRs, committed handoffs, a human merge, and this file. The scoring text itself stays in the scratchbook (`PLAN.md` / `JUDGE.md` at https://github.com/Sighopss/TVault-scratchbook-accessible); this file is product-repo evidence only.
+**Handbook item:** P-06 (AI transparency). It is also the evidence behind the rubric row *Team & AI-tool (5)* — feature PRs, committed handoffs, a human merge, and this file.
 
 > **Action required before submission (D2 PM):** Alexis and Michael each append **their own rows** below. Do not let another person write your row — the point of this file is that the human who used the tool says what they used it for. Rows pre-seeded by Trevor cover only Trevor's lane.
 
