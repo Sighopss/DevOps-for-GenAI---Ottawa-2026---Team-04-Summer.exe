@@ -1,0 +1,16 @@
+#!/usr/bin/env bash
+# Strip Cursor marketing / co-author trailers before the commit is recorded.
+set -euo pipefail
+
+file="${1:?commit message file}"
+tmp="$(mktemp)"
+
+grep -viE \
+  'co-authored-by: cursor|cursoragent@cursor\.com|made-with: cursor|made with cursor' \
+  "$file" >"$tmp" || true
+
+if [ -s "$tmp" ] || [ ! -s "$file" ]; then
+  mv "$tmp" "$file"
+else
+  rm -f "$tmp"
+fi

@@ -1,0 +1,18 @@
+---
+description: Never add Cursor branding or co-author trailers to git or GitHub.
+alwaysApply: true
+---
+
+# No Cursor attribution
+
+Never add Cursor branding or authorship to git or GitHub:
+
+- Do **not** add `Co-authored-by: Cursor` / `cursoragent@cursor.com`
+- Do **not** add `Made with Cursor`, `Made-with: Cursor`, or similar trailers
+- Do **not** pass `--trailer` that mentions Cursor when committing
+- PR bodies must not end with Cursor marketing links
+- Do **not** add "Pickup prompt (paste into the other LLM)" boilerplate to handoffs or PR templates
+
+If the environment appends attribution after your commit, amend (when amend rules allow) or strip it before the commit lands on `main`.
+
+Run `make hooks` once per clone so `scripts/git-hooks/` strips trailers locally.

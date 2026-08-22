@@ -2,7 +2,7 @@
 # `make help` is the runbook. Missing dirs skip (greenfield-safe).
 
 .DEFAULT_GOAL := help
-.PHONY: help test vault web demo plan fmt redact-check sbom
+.PHONY: help hooks test vault web demo plan fmt redact-check sbom
 
 help:
 	@echo "TraceVault runbook (no secrets — never paste passwords, keys, or AKIA here)"
@@ -62,6 +62,7 @@ help:
 	@echo "  Never reintroduce a bare @v tag, and never add a TODO in place of a pin."
 	@echo ""
 	@echo "Targets (skip cleanly if the directory is missing)"
+	@echo "  make hooks         chmod git hooks; then run once: git config core.hooksPath scripts/git-hooks"
 	@echo "  make test          pytest sdk/ (uv if present)"
 	@echo "  make vault         pytest vault/"
 	@echo "  make web           skip until web/ exists"
@@ -78,6 +79,11 @@ help:
 	@echo "      does not touch them they report nothing at all — mark those required"
 	@echo "      and every unrelated PR waits forever. Leave them optional."
 	@echo "  [ ] Trevor is the only merger. Alexis and Michael open PRs; they do not merge."
+
+hooks:
+	@chmod +x scripts/git-hooks/* scripts/strip_cursor_trailer.py 2>/dev/null || true
+	@echo "Run once per clone: git config core.hooksPath scripts/git-hooks"
+	@echo "Hooks strip Co-authored-by: Cursor / cursoragent trailers before commits land."
 
 test:
 	@if [ -d sdk ]; then \
