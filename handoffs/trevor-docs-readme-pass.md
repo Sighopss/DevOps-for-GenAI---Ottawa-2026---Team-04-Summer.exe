@@ -4,7 +4,7 @@
 - Human: `Trevor`
 - Agent id: `trevor-docs`
 - Branch: `trevor/docs/readme-pass`
-- PR: TBD
+- PR: #135
 - Mission / scope: Issue #122 (README P-15 honesty pass — CloudFront live, isolation proven, DATA_AND_ABUSE) plus a general README quality/consistency pass across all five READMEs. Every factual claim below was checked against live AWS or a local test run, not against existing docs. Issue #55 (technology inventory + roadmap) was **not** shipped in this PR — see "Blocked on" below, a duplicate is already in flight.
 
 ## Claimed paths (collision)
