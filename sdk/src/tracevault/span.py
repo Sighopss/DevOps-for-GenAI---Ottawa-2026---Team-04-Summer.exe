@@ -108,6 +108,7 @@ class Span:
         input_tokens: int | None = None,
         output_tokens: int | None = None,
         cost_usd: float | None = None,
+        attributes: dict[str, Any] | None = None,
     ) -> None:
         if input_tokens is not None:
             self._input_tokens = int(input_tokens)
@@ -115,6 +116,8 @@ class Span:
             self._output_tokens = int(output_tokens)
         if cost_usd is not None:
             self.cost_usd = float(cost_usd)
+        if attributes:
+            self._attributes = {**(self._attributes or {}), **attributes}
 
     def finish(self, status: Status | None = None) -> dict[str, Any]:
         if self._closed:

@@ -70,6 +70,10 @@ def run(*, question: str, tenant_id: str, pii: bool) -> tuple[str, list[dict[str
                     input_tokens=result.input_tokens,
                     output_tokens=result.output_tokens,
                     cost_usd=result.cost_usd,
+                    attributes={
+                        "cost.known": result.cost_known,
+                        "cost.note": result.cost_note,
+                    },
                 )
                 answer = result.text
     finally:
