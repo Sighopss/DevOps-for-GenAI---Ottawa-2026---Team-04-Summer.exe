@@ -1,0 +1,33 @@
+[project]
+name = "demo-app"
+version = "0.1.0"
+description = "TraceVault instrumented RAG/agent — emits one flight. Not a product."
+requires-python = ">=3.12"
+dependencies = [
+    "boto3",
+    "pydantic>=2",
+]
+
+[project.optional-dependencies]
+dev = ["pytest"]
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.package-dir]
+"" = "src"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+pythonpath = ["src"]
+testpaths = ["tests"]
+addopts = "-q"
+
+# After trevor-sdk (#28) merges onto main, add:
+#   [project.optional-dependencies]
+#   sdk = ["tracevault"]
+#   [tool.uv.sources]
+#   tracevault = { path = "../sdk", editable = true }
