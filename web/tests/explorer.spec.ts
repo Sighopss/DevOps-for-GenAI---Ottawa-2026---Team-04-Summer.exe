@@ -25,30 +25,130 @@ function expectNoRawPii(text: string) {
   expect(text).not.toMatch(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/i);
 }
 
+test("hosted UI code callback exchanges tokens and forwards into the explorer", async ({
+  page,
+}) => {
+  const traceA = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
+  const state = "state-token";
+  const codeVerifier = "verifier-token";
+
+  await page.addInitScript(
+    ({ storedState, storedVerifier }) => {
+      window.sessionStorage.setItem("tracevault.oauth_state", storedState);
+      window.sessionStorage.setItem("tracevault.code_verifier", storedVerifier);
+    },
+    { storedState: state, storedVerifier: codeVerifier },
+  );
+
+  await page.route(
+    "https://tracevault.auth.us-east-1.amazoncognito.com/oauth2/token",
+    async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          id_token: buildIdToken("tenant-a"),
+          access_token: "access-token",
+          refresh_token: "refresh-token",
+          token_type: "Bearer",
+          expires_in: 3600,
+        }),
+      });
+    },
+  );
+
+  await page.route("http://127.0.0.1:4010/v1/traces?limit=50", async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        flights: [
+          {
+            trace_id: traceA,
+            tenant_id: "tenant-a",
+            start_time: "2026-08-18T18:00:00.000Z",
+            end_time: "2026-08-18T18:00:01.200Z",
+            cost_usd: 0.0021,
+            status: "ok",
+            prompt_preview: "User [EMAIL] asked about [SSN]",
+          },
+        ],
+      }),
+    });
+  });
+
+  await page.route(`http://127.0.0.1:4010/v1/traces/${traceA}`, async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        trace_id: traceA,
+        tenant_id: "tenant-a",
+        expires_at: 1787421600,
+        spans: [
+          {
+            trace_id: traceA,
+            span_id: "1111111111111111",
+            parent_id: null,
+            tenant_id: "tenant-a",
+            kind: "http",
+            name: "demo.ask",
+            status: "ok",
+            start_time: "2026-08-18T18:00:00.000Z",
+            end_time: "2026-08-18T18:00:01.200Z",
+            cost_usd: 0,
+            attributes: { route: "/ask" },
+          },
+        ],
+      }),
+    });
+  });
+
+  await page.route(`http://127.0.0.1:4010/v1/traces/${traceA}/audit`, async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        events: [],
+      }),
+    });
+  });
+
+  await page.goto(`/explorer/?code=auth-code&state=${state}`);
+
+  await page.waitForURL("**/explorer/**");
+  await expect(page.getByText("Live mode")).toBeVisible();
+  await expect(
+    page.getByText("Signed in as tenant-a. Reads stay tenant-scoped through the ID token."),
+  ).toBeVisible();
+  await expect(await page.evaluate(() => window.sessionStorage.getItem("tracevault.id_token"))).toBeTruthy();
+});
+
 test("fixture A renders the explorer flow", async ({ page }) => {
   const consoleMessages: string[] = [];
   page.on("console", (message) => {
     consoleMessages.push(message.text());
   });
 
-  await page.goto("/explorer");
+  await page.goto("/explorer/");
 
   await expect(
-    page.getByRole("heading", { name: "One flight. No raw prompt storage." }),
+    page.getByRole("heading", { name: "Fixture flights" }),
   ).toBeVisible();
-  await expect(page.getByRole("heading", { name: "Signed-in list" })).toBeVisible();
   await expect(
     page.getByRole("heading", {
-      name: "Parent-child, latency, tokens, and cost",
+      name: "Timeline reconstruction",
     }),
   ).toBeVisible();
   await expect(
     page.getByRole("heading", {
-      name: "Masked query, document IDs, and scores",
+      name: "Masked query, doc ids, score",
     }),
   ).toBeVisible();
+  await expect(page.getByRole("heading", { name: "REDACTED proof" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Who opened this flight" })).toBeVisible();
   await expect(page.locator(".surface-badge").filter({ hasText: "REDACTED" })).toBeVisible();
-  await expect(page.getByText("Day 1 fixture only")).toBeVisible();
+  await expect(page.getByText("Committed fixture replay")).toBeVisible();
 
   const text = await page.locator("body").innerText();
   expectMaskedPlaceholders(text);
@@ -60,17 +160,21 @@ test("fixture A renders the explorer flow", async ({ page }) => {
 test("fixture tenant-b keeps Day 1 honest and shows only the locked 403 contract example", async ({
   page,
 }) => {
-  await page.goto("/explorer");
+  await page.goto("/explorer/");
   await page.getByLabel("Tenant").selectOption("tenant-b");
   await expect(page.getByLabel("Tenant")).toHaveValue("tenant-b");
 
   await expect(page.getByText("No flights to display.")).toBeVisible();
   await expect(
-    page.getByText("tenant-b only gets the locked 403 contract example.", {
+    page.getByText("Tenant-b only gets the locked 403 contract example on Day 1.", {
       exact: false,
     }),
   ).toBeVisible();
-  await expect(page.getByText("Locked contract example:", { exact: false })).toBeVisible();
+  await expect(
+    page.getByRole("button", {
+      name: /Isolation proof/,
+    }),
+  ).toBeVisible();
   await expect(page.getByText("Contracted 403")).toBeVisible();
 
   const text = await page.locator("body").innerText();
@@ -187,16 +291,16 @@ test("live detail makes failures, latency, model, cost, and audit legible", asyn
     });
   });
 
-  await page.goto(`/explorer?trace_id=${traceA}`);
+  await page.goto(`/explorer/?trace_id=${traceA}`);
 
-  await expect(page.getByText("Live read active")).toBeVisible();
-  await expect(page.locator(".summary-strip .stat").filter({ hasText: "Model" })).toContainText(
+  await expect(page.getByText("Live mode")).toBeVisible();
+  await expect(page.locator(".summary-line")).toContainText(
     "anthropic.claude-sonnet-4-20250514-v1:0",
   );
   await expect(page.getByText("Bedrock timed out")).toBeVisible();
   await expect(page.locator(".waterfall-row.is-error")).toHaveCount(2);
-  await expect(page.getByText("Cost USD")).toBeVisible();
-  await expect(page.locator(".summary-strip .stat").filter({ hasText: "TTL" })).toBeVisible();
+  await expect(page.getByText("REDACTED proof")).toBeVisible();
+  await expect(page.locator(".governance-grid")).toContainText("prompt_hash");
   await expect(page.locator(".audit-row")).toContainText("tenant-a");
   await expect(page.getByText("doc-policy-01")).toBeVisible();
 
@@ -249,13 +353,14 @@ test("live tenant-b sees 403 chrome from the read API and never sees tenant-a ro
     });
   });
 
-  await page.goto(`/explorer?trace_id=${traceA}`);
+  await page.goto(`/explorer/?trace_id=${traceA}`);
 
-  await expect(page.getByText("Live read active")).toBeVisible();
-  await expect(page.getByRole("heading", { name: "403 tenant mismatch" })).toBeVisible();
-  await expect(page.locator(".forbidden-copy")).toHaveText("forbidden: tenant mismatch");
+  await expect(page.getByText("Live mode")).toBeVisible();
+  await expect(page.getByText("Live 403")).toBeVisible();
+  await expect(page.getByRole("heading", { name: "forbidden" })).toBeVisible();
+  await expect(page.locator(".forbidden-copy")).toHaveText("tenant mismatch");
   await expect(
-    page.getByText("Live reads follow the signed-in ID token for tenant-b."),
+    page.getByText("Signed in as tenant-b. Reads stay tenant-scoped through the ID token."),
   ).toBeVisible();
   await expect(page.locator(".flight-list-panel")).toContainText(traceB);
   await expect(page.locator(".flight-list-panel")).not.toContainText(traceA);
@@ -308,7 +413,7 @@ test("live detail shows trace-not-found from the contracted error body", async (
     });
   });
 
-  await page.goto(`/explorer?trace_id=${traceA}`);
+  await page.goto(`/explorer/?trace_id=${traceA}`);
 
   await expect(page.getByText("Trace not found.")).toBeVisible();
   await expect(
@@ -328,10 +433,10 @@ test("live list shows API unreachable when GET /v1/traces* cannot be reached", a
     await route.abort("failed");
   });
 
-  await page.goto("/explorer");
+  await page.goto("/explorer/");
 
-  await expect(page.getByText("API unreachable.")).toHaveCount(2);
+  await expect(page.getByText("API unreachable.")).toHaveCount(1);
   await expect(
-    page.getByText("Could not reach GET /v1/traces*. Check NEXT_PUBLIC_API_URL and the read API deployment."),
+    page.getByText("Could not reach GET /v1/traces*. Check the live read deployment."),
   ).toBeVisible();
 });
