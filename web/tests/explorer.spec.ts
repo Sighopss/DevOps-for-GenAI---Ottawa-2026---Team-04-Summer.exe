@@ -33,16 +33,23 @@ test("hosted UI code callback exchanges tokens and forwards into the explorer", 
   const codeVerifier = "verifier-token";
 
   await page.addInitScript(
-    ({ storedState, storedVerifier }) => {
+    ({ storedState, storedVerifier, redirectUri }) => {
       window.sessionStorage.setItem("tracevault.oauth_state", storedState);
       window.sessionStorage.setItem("tracevault.code_verifier", storedVerifier);
+      window.sessionStorage.setItem("tracevault.redirect_uri", redirectUri);
     },
-    { storedState: state, storedVerifier: codeVerifier },
+    {
+      storedState: state,
+      storedVerifier: codeVerifier,
+      redirectUri: "http://127.0.0.1:3200/explorer/",
+    },
   );
 
   await page.route(
     "https://tracevault.auth.us-east-1.amazoncognito.com/oauth2/token",
     async (route) => {
+      const body = route.request().postData() ?? "";
+      expect(body).toContain("redirect_uri=http%3A%2F%2F127.0.0.1%3A3200%2Fexplorer%2F");
       await route.fulfill({
         status: 200,
         contentType: "application/json",

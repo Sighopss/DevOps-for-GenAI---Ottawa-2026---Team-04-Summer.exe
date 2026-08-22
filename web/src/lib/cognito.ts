@@ -11,6 +11,7 @@ export const ID_TOKEN_STORAGE_KEY = "tracevault.id_token";
 export const TENANT_STORAGE_KEY = "tracevault.tenant";
 const CODE_VERIFIER_STORAGE_KEY = "tracevault.code_verifier";
 const OAUTH_STATE_STORAGE_KEY = "tracevault.oauth_state";
+const REDIRECT_URI_STORAGE_KEY = "tracevault.redirect_uri";
 
 type StoredIdentity = {
   tenantId: TenantId | null;
@@ -63,6 +64,7 @@ export async function buildHostedUiUrl(redirectUri: string): Promise<string> {
 
   window.sessionStorage.setItem(CODE_VERIFIER_STORAGE_KEY, codeVerifier);
   window.sessionStorage.setItem(OAUTH_STATE_STORAGE_KEY, state);
+  window.sessionStorage.setItem(REDIRECT_URI_STORAGE_KEY, redirectUri);
 
   const url = new URL(`https://${domain}/oauth2/authorize`);
   url.searchParams.set("identity_provider", "COGNITO");
@@ -92,6 +94,7 @@ function clearHostedUiTransientState(): void {
 
   window.sessionStorage.removeItem(CODE_VERIFIER_STORAGE_KEY);
   window.sessionStorage.removeItem(OAUTH_STATE_STORAGE_KEY);
+  window.sessionStorage.removeItem(REDIRECT_URI_STORAGE_KEY);
 }
 
 function cleanCurrentUrl(nextUrl?: string): void {
@@ -179,7 +182,11 @@ export async function completeHostedUiSignIn(): Promise<boolean> {
     throw new Error("Cognito state verification failed.");
   }
 
-  const idToken = await exchangeAuthorizationCode(code, window.location.origin);
+  // Cognito requires the token exchange redirect_uri to match authorize exactly.
+  const redirectUri =
+    window.sessionStorage.getItem(REDIRECT_URI_STORAGE_KEY) ??
+    `${window.location.origin}${window.location.pathname}`;
+  const idToken = await exchangeAuthorizationCode(code, redirectUri);
   window.sessionStorage.setItem(ID_TOKEN_STORAGE_KEY, idToken);
   clearHostedUiTransientState();
   currentUrl.searchParams.delete("code");
