@@ -4,6 +4,11 @@
 *.tfstate.*
 crash.log
 crash.*.log
+# Remote state config — holds the real bucket name and account id.
+# Copy backend.tf.example to backend.tf locally; never commit it.
+backend.tf
+!backend.tf.example
+
 override.tf
 override.tf.json
 *_override.tf

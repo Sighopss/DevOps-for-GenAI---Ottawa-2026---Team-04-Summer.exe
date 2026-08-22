@@ -5,7 +5,7 @@ S3 layout (contract + IAM prefix policy — keys MUST start with tenant_id/):
 
 DynamoDB (table: PK tenant_id S, SK trace_id S, TTL attr expires_at):
     flight summary item: SK = "t#{trace_id}"
-    audit event item:    SK = "a#{trace_id}#{ts_iso}"
+    audit event item:    SK = "a#{trace_id}#{suffix}"  (suffix: see vault/audit/log.py)
 The prefixes let the read path Query flights with begins_with("t#") and a
 trace's audit rows with begins_with("a#{trace_id}#") without ever scanning
 across tenants.
@@ -27,8 +27,8 @@ def flight_sk(trace_id: str) -> str:
     return FLIGHT_SK_PREFIX + trace_id
 
 
-def audit_sk(trace_id: str, ts_iso: str) -> str:
-    return f"{AUDIT_SK_PREFIX}{trace_id}#{ts_iso}"
+def audit_sk(trace_id: str, suffix: str) -> str:
+    return f"{AUDIT_SK_PREFIX}{trace_id}#{suffix}"
 
 
 def flight_item(
