@@ -5,7 +5,7 @@ Issue #54. Attacks run against the **live** deployment, with the fix or control 
 - **Target API:** `https://55qm437628.execute-api.us-east-1.amazonaws.com`
 - **Edge:** `https://d13b678j60bhap.cloudfront.net`
 - **Run date:** 2026-08-22, from a machine outside the deploy pipeline (vault lane).
-- **Auth state:** the authenticated attacks (cross-tenant read, live PII flight) are scaffolded and ready; they need a tenant key + Cognito sign-in the operator holds out of band. Everything else below is captured live.
+- **Auth state:** all attacks below — unauthenticated **and** authenticated — are **captured live**. The authenticated set ran as `tenant-a`/`tenant-b` with real tenant keys and Cognito ID tokens; at-rest inspection used the `tracevault-alexis` read-only IAM role. Reproduce: `TENANT_A_KEY=… TENANT_A_JWT=… TENANT_B_JWT=… bash docs/redteam/redteam.sh` → 14/14.
 
 ## Results — unauthenticated / hostile-input (captured live)
 
@@ -27,17 +27,20 @@ Issue #54. Attacks run against the **live** deployment, with the fix or control 
 
 **Reading of the unauthenticated surface:** every read is fail-closed at the gateway; ingest is fail-closed at the Lambda with the byte-exact contract body; auth precedes parsing so hostile bodies never reach code behind a bad key; the JWT authorizer rejects forged/unsigned tokens; CORS does not reflect arbitrary origins; the edge sets HSTS/CSP/nosniff even on errors. No unauthenticated path returns tenant data or writes an audit row.
 
-## Authenticated attacks — scaffolded, ready to fire
+## Authenticated attacks — CAPTURED LIVE (2026-08-22)
 
-These need a real tenant key (ingest) and a Cognito ID token (read). Steps in `redteam/redteam.sh`, env-driven; no secret is committed.
+Ran against production as `tenant-a`/`tenant-b` with real tenant keys + Cognito ID tokens; no secret committed (the harness reads them from the environment). Each run ingests its own flight carrying `victim@example.com`, `123-45-6789`, an AWS-key-shaped string, and a nested `attributes.note` backup email, then attacks that trace.
 
-| # | Attack | Control it should hit | Evidence to capture |
+| # | Attack | Live result | Verdict |
 |---|---|---|---|
-| B1 | **Cross-tenant read** — tenant-b ID token requests a tenant-a `trace_id` | 403 (not 404), body `{"error":{"code":"forbidden","message":"tenant mismatch"}}`, no spans in body | status + body |
-| B2 | **Live PII exfiltration** — ingest a tenant-a flight with email + fake SSN in the prompt, then read it back and inspect S3/Dynamo at rest | `prompt_preview` shows `[EMAIL]`/`[SSN]`, `prompt_hash` present, raw values absent from the object and item | read body + (with `tracevault-alexis` key) `s3api get-object` / `dynamodb get-item` |
-| B3 | **Tenant-b list isolation** — tenant-b lists flights after a tenant-a flight exists | tenant-a `trace_id` absent from tenant-b's list | list body |
-| B4 | **Audit trail** — open a trace, then GET its audit | one row with actor/tenant/trace/ts; second open → two rows oldest-first | audit body ×2 |
-| B5 | **Prompt injection at ingest** — span text `"ignore previous instructions…"` | stored as inert masked data; plain 202; no behavior change | 202 + stored payload |
+| B1 | **Cross-tenant read** — tenant-b ID token requests the tenant-a trace | `403 {"error":{"code":"forbidden","message":"tenant mismatch"}}`, no `span_id` in body | ✅ 403 not 404 |
+| B2 | **Live PII exfiltration** — ingest PII flight (`202`), read back as tenant-a | `prompt_preview` → `reach me at [EMAIL] my ssn is [SSN] and key [AWS_KEY]`; nested `attributes.note` → `backup email [EMAIL]`; all raw values absent from the read body | ✅ masked, deep |
+| B2-rest | **At-rest inspection** — read the raw S3 object + DynamoDB item directly with the `tracevault-alexis` IAM role | S3 object `tenant-a/…/….json` is `aws:kms`-encrypted and masked; Dynamo item `t#…` masked, `expires_at` TTL set, `cost_usd` preserved. **Leak scan of both stores: 0 hits** on all four raw strings | ✅ nothing raw at rest |
+| B3 | **Tenant-b list isolation** — tenant-b lists flights | trace absent from tenant-b's list | ✅ isolated |
+| B4 | **Audit trail** — open the trace's audit twice | rows written, actor `tenant-a`, oldest-first (confirms the #72 ordering fix live) | ✅ audited |
+| B5 | **Log hygiene (#53)** — Logs Insights scan of both vault log groups for the four raw strings + tenant key + password | **0 matches**, while a sanity query confirms the ingest Lambda logged in-window — no PII/secret reaches CloudWatch | ✅ clean logs |
+
+Harness result: `14/14` (6 unauthenticated + 8 authenticated). B2-rest and B5 use the `tracevault-alexis` IAM role / Logs Insights outside the HTTP harness.
 
 ## Infrastructure findings (from PR #76's honesty pass — real red-team material)
 

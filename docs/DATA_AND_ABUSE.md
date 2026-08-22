@@ -54,11 +54,13 @@ Tests: `vault/tests/ingest/test_adversarial.py::test_prompt_injection_stored_as_
 
 *A looping agent (or a hostile client) floods ingest with spans.*
 
-Controls in the vault: ≤100 spans per batch, one `trace_id` per batch, 1 MB body cap, 10k-char per-field cap (also the ReDoS gate), depth-32 attribute nesting cap — each violation is a contract 4xx, nothing stored. Platform half (Trevor): WAF managed rules and the 5xx alarm; DynamoDB is on-demand billing with 7-day TTL, so flood damage is bounded in time.
+The **active** flood bound is the in-vault caps: ≤100 spans per batch, one `trace_id` per batch, 1 MB body cap, 10k-char per-field cap (also the ReDoS gate), depth-32 attribute nesting cap — each violation is a contract 4xx, nothing stored — plus API Gateway default throttling. DynamoDB is on-demand with a 7-day TTL, so flood damage is bounded in time.
+
+**WAF is inert (do not count on it).** The WAFv2 managed-rules ACL exists but attaches to nothing — WAFv2 binds to REST APIs, not the HTTP API this stack uses (`infra/api.tf` association fails every apply; see `docs/RED_TEAM.md` infra findings and #97). So the caps above are the *only* application-layer flood control today; the fix (attach the ACL to CloudFront, Trevor's infra issue) is the dependency this row waits on. The 5xx alarm is Trevor's platform-side signal.
 
 Tests: `vault/tests/ingest/test_validate.py::test_oversize_batch_rejected`, `test_adversarial.py` (body/nesting/length caps).
 
-**Accepted risk:** no per-tenant rate limit on ingest. At demo scale, API Gateway default throttling + WAF + the batch caps bound the blast radius; a production deployment would add usage plans / per-key throttling.
+**Accepted risk:** no per-tenant rate limit on ingest. At demo scale, API Gateway default throttling + the batch caps bound the blast radius (WAF is inert — see above); a production deployment would add usage plans / per-key throttling and a working WAF on CloudFront.
 
 ### 5. Stolen ingest key
 
@@ -84,6 +86,6 @@ Tests: `vault/tests/redact/test_no_raw_leak.py`, `vault/tests/ingest/test_handle
 
 | Risk | Why accepted for the 48h | Production path |
 |---|---|---|
-| No per-tenant ingest rate limit | WAF + gateway throttling + batch caps bound it at demo scale | API keys with usage plans |
+| No per-tenant ingest rate limit (WAF inert) | Gateway throttling + in-Lambda batch caps bound it at demo scale | API keys with usage plans + WAF attached to CloudFront |
 | S3 payload objects have no lifecycle rule | Objects are unreachable once the Dynamo item's TTL expires; bucket is SSE-KMS, private, tenant-prefixed IAM | S3 lifecycle expiry matching the TTL |
 | Stolen key can pollute its own tenant until rotated | Write-only key, cross-tenant write impossible, 7-day TTL | Shorter-lived keys, anomaly alarms |
