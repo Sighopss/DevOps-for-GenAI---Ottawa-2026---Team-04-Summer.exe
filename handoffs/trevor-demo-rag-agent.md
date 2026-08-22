@@ -79,15 +79,3 @@ Empty = incomplete PR. Copy from PLAN **Rubric 100** / P-ids.
 ## Contract reminder
 
 Demo is not a product. One retrieve tool (`get_doc_metadata`). No write/delete/shell. `--pii` prepends synthetic email/SSN and sets llm `sensitive=True`; never log that prompt. Fake Bedrock must be disclosed (P-15). Ingest is `X-Tenant-Key`, not Cognito.
-
-## Pickup prompt (paste into the other LLM)
-
-```
-Read this handoff and PLAN.md.
-Do not edit the claimed paths above.
-Continue your own mission using What I shipped.
-Do not merge to main — Trevor merges.
-trevor-scripts: scripts/demo_pii_flight.sh should call
-  TRACEVAULT_FAKE_BEDROCK=1 uv run python -m demo_app.main --question "..." --tenant tenant-a --pii
-from demo-app/ (or live Bedrock with the flag unset).
-```

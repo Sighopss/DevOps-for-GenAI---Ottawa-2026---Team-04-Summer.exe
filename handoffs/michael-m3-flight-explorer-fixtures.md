@@ -60,12 +60,3 @@ Trevor infra, CI, docs, and governance work. Alexis ingest, redact, read, and au
 ## Contract reminder
 
 `web/` reads Day 1 fixtures only for this PR. Detail is via `?trace_id=` and not dynamic `[id]` routes. Day 2 live reads must stay on `GET /v1/traces*` with Cognito token handling and repo-owned env names only.
-
-## Pickup prompt (paste into the other LLM)
-
-```
-Read this handoff and the ownership table in README.md.
-Do not edit the claimed paths above.
-Continue your own mission using What I shipped.
-Do not merge to main — Trevor merges.
-```

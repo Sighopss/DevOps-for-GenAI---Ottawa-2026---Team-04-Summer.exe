@@ -79,12 +79,3 @@ red-team writeup: the repo's secret scanning is gitleaks-only, which is
 pattern-based on text and does not open archives. An `infra/`-scoped
 `git status` check before commit, or a pre-commit hook, would catch the next one
 by shape rather than by luck.
-
-## Pickup prompt (paste into the other LLM)
-
-```
-Read this handoff and PLAN.md.
-Do not edit the claimed paths above.
-Continue your own mission using What I shipped.
-Do not merge to main — Trevor merges.
-```

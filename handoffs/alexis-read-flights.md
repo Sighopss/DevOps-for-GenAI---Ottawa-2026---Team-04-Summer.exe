@@ -51,12 +51,3 @@ Anyone not writing `vault/` (open: #67 sha-pin — no overlap).
 ## Contract reminder
 
 `GET /v1/traces*` responses and error bodies are byte-exact to `contracts/http.md` + the 403 fixture. Cross-tenant = 403, unknown = 404, claim-less = 401 — never collapse those.
-
-## Pickup prompt (paste into the other LLM)
-
-```
-Read this handoff and PLAN.md.
-Do not edit the claimed paths above.
-Continue your own mission using What I shipped.
-Do not merge to main — Trevor merges.
-```

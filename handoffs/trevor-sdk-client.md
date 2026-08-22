@@ -63,12 +63,3 @@ Alexis ingest live URL. Hour 0 `contracts/span.schema.json` (validates draft/emb
 ## Contract reminder
 
 SDK **emits** schema-shaped spans and POSTs the batch. Alexis redacts at ingest. SDK is not Presidio and does not persist the vault. Raw prompts are never logged.
-
-## Pickup prompt (paste into the other LLM)
-
-```
-Read this handoff and PLAN.md.
-Do not edit the claimed paths above.
-Continue your own mission using What I shipped.
-Do not merge to main — Trevor merges.
-```

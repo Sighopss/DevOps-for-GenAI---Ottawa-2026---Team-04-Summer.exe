@@ -68,12 +68,3 @@ DESIGN.md
 ## Contract reminder
 
 Judge button only. Unix. No PowerShell. No secrets in argv or echo. Ingest is `X-Tenant-Key`, not Cognito.
-
-## Pickup prompt (paste into the other LLM)
-
-```
-Read this handoff and PLAN.md.
-Do not edit the claimed paths above.
-Continue your own mission using What I shipped.
-Do not merge to main — Trevor merges.
-```

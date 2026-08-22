@@ -56,12 +56,3 @@ Empty = incomplete PR. Name the lifecycle stage, the handbook P-ids, and the rub
 ## Contract reminder
 
 `<only the interface you own — not another lane’s internals>`
-
-## Pickup prompt (paste into the other LLM)
-
-```
-Read this handoff and the ownership table in README.md.
-Do not edit the claimed paths above.
-Continue your own mission using What I shipped.
-Do not merge to main — Trevor merges.
-```

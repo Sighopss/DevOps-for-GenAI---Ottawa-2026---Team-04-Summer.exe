@@ -47,12 +47,3 @@ Anyone not writing `vault/` (currently open: #67 trevor/ci/sha-pin — no overla
 ## Contract reminder
 
 `GET /v1/traces/{trace_id}/audit` → `200 {"events":[{"actor","tenant_id","trace_id","ts"}]}` and the GET itself **writes** a row (read mission wires that). `AuditEvent.to_dict()` is that exact shape.
-
-## Pickup prompt (paste into the other LLM)
-
-```
-Read this handoff and PLAN.md.
-Do not edit the claimed paths above.
-Continue your own mission using What I shipped.
-Do not merge to main — Trevor merges.
-```

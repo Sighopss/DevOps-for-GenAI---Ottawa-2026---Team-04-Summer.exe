@@ -116,12 +116,3 @@ updated — that text is exactly what a judge reads first.
 CloudFront (`https://d13b678j60bhap.cloudfront.net`) answers **403**, because
 the web bucket is empty — `web/` does not exist on any branch yet (#19–#25).
 The API is live; the CDN has nothing to serve.
-
-## Pickup prompt (paste into the other LLM)
-
-```
-Read this handoff and PLAN.md.
-Do not edit the claimed paths above.
-Continue your own mission using What I shipped.
-Do not merge to main — Trevor merges.
-```

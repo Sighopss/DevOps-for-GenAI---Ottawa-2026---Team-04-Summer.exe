@@ -50,12 +50,3 @@ Any agent not writing `vault/` or this handoff file: `trevor-infra` (#29), `trev
 ## Contract reminder
 
 `vault.redact.redact_strict(prompt)` is the only path ingest may use to produce `prompt_hash` / `prompt_preview`; on `RedactionError` respond `400 {"error":{"code":"redaction_failed",...}}` and store nothing. Downstream may rely on: preview ≤ 200 chars, hash = 64 lowercase hex, tokens `[EMAIL] [SSN] [AWS_KEY] [API_KEY] [REDACTED]`.
-
-## Pickup prompt (paste into the other LLM)
-
-```
-Read this handoff and PLAN.md.
-Do not edit the claimed paths above.
-Continue your own mission using What I shipped.
-Do not merge to main — Trevor merges.
-```
