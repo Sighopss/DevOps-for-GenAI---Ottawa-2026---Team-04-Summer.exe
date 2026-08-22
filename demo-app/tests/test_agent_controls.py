@@ -117,6 +117,38 @@ def test_bedrock_timeout_retry_and_token_budgets(
     assert config.retries["max_attempts"] == 1
 
 
+def test_live_converse_computes_nonzero_cost_usd_from_real_usage(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Issue #118: the live path must not hardcode cost_usd=0.0."""
+
+    class Client:
+        def converse(self, **kwargs: Any) -> dict[str, Any]:
+            return {
+                "output": {"message": {"content": [{"text": "answer"}]}},
+                "usage": {"inputTokens": 612, "outputTokens": 143},
+            }
+
+    monkeypatch.delenv("TRACEVAULT_FAKE_BEDROCK", raising=False)
+    monkeypatch.setenv("BEDROCK_MODEL_ID", "amazon.nova-lite-v1:0")
+    monkeypatch.setattr(bedrock.boto3, "client", lambda *_a, **_k: Client())
+
+    result = bedrock.converse(question="q", context="c")
+    assert result.input_tokens == 612
+    assert result.output_tokens == 143
+    assert result.cost_usd > 0.0
+    assert result.cost_known is True
+    assert "amazon.nova-lite-v1:0" in result.cost_note
+
+
+def test_fake_bedrock_cost_stays_zero_and_says_so(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("TRACEVAULT_FAKE_BEDROCK", "1")
+    result = bedrock.converse(question="q", context="c")
+    assert result.cost_usd == 0.0
+    assert result.cost_known is True
+    assert "TRACEVAULT_FAKE_BEDROCK" in result.cost_note
+
+
 def test_converse_rejects_model_outside_allowlist(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

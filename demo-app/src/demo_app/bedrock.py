@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import logging
 import os
 from dataclasses import dataclass
 from typing import Any
@@ -11,7 +12,10 @@ from typing import Any
 import boto3
 from botocore.config import Config
 
+from demo_app.pricing import estimate_cost_usd
 from demo_app.rag import Document
+
+log = logging.getLogger("demo_app.bedrock")
 
 CONNECT_TIMEOUT_S = 5
 READ_TIMEOUT_S = 30
@@ -19,7 +23,10 @@ MAX_OUTPUT_TOKENS = 256
 FAKE_EMBED_DIM = 64
 FAKE_INPUT_TOKENS = 1
 FAKE_OUTPUT_TOKENS = 1
+# Fake mode is a disclosed stub (P-15), not a live call — its cost stays 0.0
+# by definition, not because pricing is unknown. See docs/AI_INVENTORY.md.
 FAKE_COST_USD = 0.0
+FAKE_COST_NOTE = "TRACEVAULT_FAKE_BEDROCK=1: stub, not a live call, cost_usd is definitionally 0.0"
 
 # Agreed product models (must stay in infra `bedrock_model_ids` IAM allowlist).
 DEFAULT_CONVERSE_MODEL_ID = "amazon.nova-lite-v1:0"
@@ -39,6 +46,8 @@ class ConverseResult:
     input_tokens: int
     output_tokens: int
     cost_usd: float
+    cost_known: bool = True
+    cost_note: str = ""
 
 
 def fake_bedrock_enabled() -> bool:
@@ -64,6 +73,8 @@ def converse(*, question: str, context: str) -> ConverseResult:
             input_tokens=FAKE_INPUT_TOKENS,
             output_tokens=FAKE_OUTPUT_TOKENS,
             cost_usd=FAKE_COST_USD,
+            cost_known=True,
+            cost_note=FAKE_COST_NOTE,
         )
     if model not in ALLOWED_CONVERSE_MODEL_IDS:
         raise RuntimeError(
@@ -83,12 +94,19 @@ def converse(*, question: str, context: str) -> ConverseResult:
     )
     text = _converse_text(response)
     usage = response.get("usage") or {}
+    input_tokens = int(usage.get("inputTokens") or 0)
+    output_tokens = int(usage.get("outputTokens") or 0)
+    estimate = estimate_cost_usd(model, input_tokens=input_tokens, output_tokens=output_tokens)
+    if not estimate.known:
+        log.error(estimate.note)
     return ConverseResult(
         text=text,
         model=model,
-        input_tokens=int(usage.get("inputTokens") or 0),
-        output_tokens=int(usage.get("outputTokens") or 0),
-        cost_usd=0.0,
+        input_tokens=input_tokens,
+        output_tokens=output_tokens,
+        cost_usd=estimate.usd,
+        cost_known=estimate.known,
+        cost_note=estimate.note,
     )
 
 
