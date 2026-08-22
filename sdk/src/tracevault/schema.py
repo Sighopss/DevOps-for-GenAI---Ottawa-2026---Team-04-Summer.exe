@@ -70,11 +70,6 @@ def _schema_candidates() -> list[Path]:
     for root in roots:
         for rel in (
             Path("contracts") / "span.schema.json",
-            Path("skills") / "trevor-recorder" / "span.schema.draft.json",
-            Path("TVault-scratchbook-accessible")
-            / "skills"
-            / "trevor-recorder"
-            / "span.schema.draft.json",
         ):
             candidate = (root / rel).resolve()
             if candidate in seen:

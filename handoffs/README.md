@@ -1,6 +1,6 @@
 # Handoffs (per PR)
 
-> **In-tree copy for agents working in this product repo.** The canonical version of this file, plus [`PLAN.md`](https://github.com/Sighopss/TVault-scratchbook-accessible/blob/main/PLAN.md) and [`JUDGE.md`](https://github.com/Sighopss/TVault-scratchbook-accessible/blob/main/JUDGE.md), live in the scratchbook at https://github.com/Sighopss/TVault-scratchbook-accessible and must **not** be duplicated into this repo.
+> **Process reference for agents working in this repo.** One committed handoff file per PR, plus a collision check before any write.
 
 Every feature PR **commits** a handoff file and pastes the same text into the GitHub PR body. Other LLMs load that — they do not wait for chat, and they do not implement your slice.
 
@@ -10,7 +10,7 @@ Do not invent routes. After hour 0, HTTP is `contracts/http.md`.
 
 ## Collision check (before any write)
 
-1. Scratchbook [`PLAN.md`](https://github.com/Sighopss/TVault-scratchbook-accessible/blob/main/PLAN.md) write paths for **your** human. If the task is another lane, stop. Also [`JUDGE.md`](https://github.com/Sighopss/TVault-scratchbook-accessible/blob/main/JUDGE.md) — do not break Never-kill. Do not add PLAN/JUDGE to the product repo.
+1. Confirm the task is in **your** lane. `README.md` names who owns which tree. If it is another lane, stop.
 2. Local lease: `.agent-leases.json` (gitignored). Overlap + started < 4h → stop. Do not delete someone else’s lease.
 3. **Open PRs** (other machines):
 
@@ -39,8 +39,7 @@ After merge, the file stays on `main` as history. Do not rewrite another PR’s 
 ## Pickup (other LLM)
 
 ```
-Read scratchbook PLAN.md, JUDGE.md, START.md (https://github.com/Sighopss/TVault-scratchbook-accessible),
-and handoffs/README.md in this repo.
+Read handoffs/README.md and the ownership table in README.md.
 gh pr list --state open
 gh pr view <N>
 Use only What I shipped / outputs. Do not edit Claimed paths.

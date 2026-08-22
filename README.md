@@ -22,13 +22,21 @@ These are the four **targets** the build is aimed at, not a claim about what run
 
 Until that line holds a real CloudFront URL, treat the deployed product as not yet live. Nothing here invents a hostname.
 
-## Plan, judge bar, scoring
+## Governance, security and evidence
 
-This repo is the **product only**. The plan, the judge click-path, the handbook map (P-01–P-15), the threat model, the system card, and the 100-point rubric live in the team scratchbook and are deliberately **not** duplicated here:
+Everything a reviewer needs is in this repository. Nothing required to evaluate TraceVault lives anywhere else.
 
-**https://github.com/Sighopss/TVault-scratchbook-accessible** — `PLAN.md` + `JUDGE.md`.
+| Artifact | Where | Status |
+|---|---|---|
+| Architecture + data flow | `README.md` | in progress |
+| Threat model + trust boundaries | `SECURITY.md` | in progress |
+| Governance / AI system card | `GOVERNANCE.md` | in progress |
+| AI usage disclosure | [`AI_USAGE.md`](AI_USAGE.md) | present |
+| Data classification + abuse cases | `docs/DATA_AND_ABUSE.md` | in progress |
+| Runbook | `make help` | present |
+| Frozen HTTP + span contract | `contracts/` | present |
 
-Agents working in this repo still read those two files from that repo before writing code.
+Items marked in progress have open issues against them; the tracking issue for the full submission checklist is pinned.
 
 ## Team
 
