@@ -1,5 +1,15 @@
-﻿# Deploy from main only. OIDC (never AKIA). Skip apply if infra/ is missing.
-# Rollback = re-run the last green run of this workflow (see Makefile help).
+# Deploy from main only. OIDC (never AKIA). Skip apply if infra/ is missing.
+# Rollback: see "Rollback (drill)" in `make help` — re-run the last green run
+# of this workflow, verified with a timestamp, not just asserted.
+#
+# infra/backend.tf is gitignored (bucket name is account-scoped, not secret —
+# see infra/backend.tf.example). Every job that runs terraform writes it fresh
+# from the values below before `terraform init`. Without this, terraform falls
+# back to a LOCAL backend on the runner: state starts empty on every run, so
+# `apply` tries to re-create all already-live resources (collisions / IAM
+# AccessDenied) and `terraform output` always reports "No outputs found".
+# dev and prod use separate state keys and a separate TF_VAR_env so a prod
+# apply can never read or write dev's state.
 
 name: deploy
 
@@ -10,6 +20,10 @@ on:
 permissions:
   contents: read
   id-token: write
+
+env:
+  TF_STATE_BUCKET: tracevault-tfstate-887991000498
+  TF_STATE_TABLE: tracevault-tf-locks
 
 jobs:
   gate:
@@ -39,10 +53,23 @@ jobs:
     if: needs.gate.outputs.infra == 'true' && needs.gate.outputs.role == 'true'
     env:
       AWS_REGION: us-east-1
+      TF_VAR_env: dev
+      TF_STATE_KEY: dev/terraform.tfstate
     steps:
       - name: Checkout
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
       - name: Setup Terraform 1.9
+        id: tf_setup
+        continue-on-error: true
+        uses: hashicorp/setup-terraform@b9cd54a3c349d3f38e8881555d616ced269862dd # v3.1.2
+        with:
+          terraform_version: "1.9.8"
+          terraform_wrapper: false
+      - name: Wait before retry (setup-terraform flakes with ECONNRESET on GH-hosted runners)
+        if: steps.tf_setup.outcome == 'failure'
+        run: sleep 15
+      - name: Setup Terraform 1.9 (retry)
+        if: steps.tf_setup.outcome == 'failure'
         uses: hashicorp/setup-terraform@b9cd54a3c349d3f38e8881555d616ced269862dd # v3.1.2
         with:
           terraform_version: "1.9.8"
@@ -52,6 +79,20 @@ jobs:
         with:
           role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
           aws-region: us-east-1
+      - name: Configure remote state backend
+        working-directory: infra
+        run: |
+          cat > backend.tf <<EOF
+          terraform {
+            backend "s3" {
+              bucket         = "${TF_STATE_BUCKET}"
+              key            = "${TF_STATE_KEY}"
+              region         = "us-east-1"
+              dynamodb_table = "${TF_STATE_TABLE}"
+              encrypt        = true
+            }
+          }
+          EOF
       - name: terraform apply dev
         working-directory: infra
         env:
@@ -77,10 +118,28 @@ jobs:
     if: needs.gate.outputs.infra == 'true' && needs.gate.outputs.role == 'true'
     env:
       AWS_REGION: us-east-1
+      # Separate var + separate state key from apply-dev. Before this, prod
+      # ran the identical `terraform init && apply` with no workspace and no
+      # distinct key, so a prod run would have read/written dev's own state
+      # (see infra/backend.tf.example + infra/envs/prod.tfvars.example, which
+      # already assumes env=prod — deploy.yml just never set it).
+      TF_VAR_env: prod
+      TF_STATE_KEY: prod/terraform.tfstate
     steps:
       - name: Checkout
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
       - name: Setup Terraform 1.9
+        id: tf_setup
+        continue-on-error: true
+        uses: hashicorp/setup-terraform@b9cd54a3c349d3f38e8881555d616ced269862dd # v3.1.2
+        with:
+          terraform_version: "1.9.8"
+          terraform_wrapper: false
+      - name: Wait before retry (setup-terraform flakes with ECONNRESET on GH-hosted runners)
+        if: steps.tf_setup.outcome == 'failure'
+        run: sleep 15
+      - name: Setup Terraform 1.9 (retry)
+        if: steps.tf_setup.outcome == 'failure'
         uses: hashicorp/setup-terraform@b9cd54a3c349d3f38e8881555d616ced269862dd # v3.1.2
         with:
           terraform_version: "1.9.8"
@@ -90,6 +149,20 @@ jobs:
         with:
           role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
           aws-region: us-east-1
+      - name: Configure remote state backend
+        working-directory: infra
+        run: |
+          cat > backend.tf <<EOF
+          terraform {
+            backend "s3" {
+              bucket         = "${TF_STATE_BUCKET}"
+              key            = "${TF_STATE_KEY}"
+              region         = "us-east-1"
+              dynamodb_table = "${TF_STATE_TABLE}"
+              encrypt        = true
+            }
+          }
+          EOF
       - name: terraform apply prod
         working-directory: infra
         env:
@@ -126,9 +199,91 @@ jobs:
     env:
       AWS_ROLE_ARN: ${{ secrets.AWS_ROLE_ARN }}
       AWS_REGION: us-east-1
+      # Web always publishes from dev's state — there is one live web bucket /
+      # CloudFront distribution (dev). apply-prod, if it ever runs, provisions
+      # an independent stack under prod/terraform.tfstate; it is not synced here.
+      TF_STATE_KEY: dev/terraform.tfstate
     steps:
       - name: Checkout
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - name: Configure AWS credentials (OIDC)
+        if: env.AWS_ROLE_ARN != ''
+        uses: aws-actions/configure-aws-credentials@7474bc4690e29a8392af63c5b98e7449536d5c3a # v4.3.1
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+          aws-region: us-east-1
+      - name: Setup Terraform 1.9
+        id: tf_setup_web
+        if: env.AWS_ROLE_ARN != '' && needs.gate.outputs.infra == 'true'
+        continue-on-error: true
+        uses: hashicorp/setup-terraform@b9cd54a3c349d3f38e8881555d616ced269862dd # v3.1.2
+        with:
+          terraform_version: "1.9.8"
+          terraform_wrapper: false
+      - name: Wait before retry (setup-terraform flakes with ECONNRESET on GH-hosted runners)
+        if: env.AWS_ROLE_ARN != '' && needs.gate.outputs.infra == 'true' && steps.tf_setup_web.outcome == 'failure'
+        run: sleep 15
+      - name: Setup Terraform 1.9 (retry)
+        if: env.AWS_ROLE_ARN != '' && needs.gate.outputs.infra == 'true' && steps.tf_setup_web.outcome == 'failure'
+        uses: hashicorp/setup-terraform@b9cd54a3c349d3f38e8881555d616ced269862dd # v3.1.2
+        with:
+          terraform_version: "1.9.8"
+          terraform_wrapper: false
+      - name: Configure remote state backend
+        if: env.AWS_ROLE_ARN != '' && needs.gate.outputs.infra == 'true'
+        working-directory: infra
+        run: |
+          cat > backend.tf <<EOF
+          terraform {
+            backend "s3" {
+              bucket         = "${TF_STATE_BUCKET}"
+              key            = "${TF_STATE_KEY}"
+              region         = "us-east-1"
+              dynamodb_table = "${TF_STATE_TABLE}"
+              encrypt        = true
+            }
+          }
+          EOF
+      - name: Read terraform outputs (bucket, distribution, NEXT_PUBLIC_*)
+        if: env.AWS_ROLE_ARN != '' && needs.gate.outputs.infra == 'true'
+        working-directory: infra
+        run: |
+          terraform init -input=false
+          OUT_JSON="$(terraform output -json)"
+          BUCKET="$(echo "$OUT_JSON" | jq -r '.web_bucket.value // empty')"
+          DIST="$(echo "$OUT_JSON" | jq -r '.cloudfront_distribution_id.value // empty')"
+          API_URL="$(echo "$OUT_JSON" | jq -r '.next_public_api_url.value // empty')"
+          COG_REGION="$(echo "$OUT_JSON" | jq -r '.next_public_cognito_region.value // empty')"
+          COG_POOL="$(echo "$OUT_JSON" | jq -r '.next_public_cognito_user_pool_id.value // empty')"
+          COG_CLIENT="$(echo "$OUT_JSON" | jq -r '.next_public_cognito_client_id.value // empty')"
+          COG_DOMAIN="$(echo "$OUT_JSON" | jq -r '.next_public_cognito_domain.value // empty')"
+
+          # Refuse to sync on garbage. This is the exact bug that shipped a
+          # broken publish before: `terraform output -raw web_bucket` prints
+          # the "No outputs found" warning text on empty/wrong state, and that
+          # text was fed straight into `aws s3 sync` as the bucket name.
+          if [ -z "$BUCKET" ] || [ -z "$DIST" ]; then
+            echo "::error::terraform outputs web_bucket / cloudfront_distribution_id are empty. apply-dev has not produced usable state (never applied yet, or apply-dev failed before any resource was created). Refusing to sync rather than target an invalid bucket."
+            exit 1
+          fi
+
+          {
+            echo "TV_WEB_BUCKET=$BUCKET"
+            echo "TV_CF_DIST_ID=$DIST"
+          } >> "$GITHUB_ENV"
+
+          if [ -n "$API_URL" ] && [ -n "$COG_REGION" ] && [ -n "$COG_POOL" ] && [ -n "$COG_CLIENT" ] && [ -n "$COG_DOMAIN" ]; then
+            {
+              echo "NEXT_PUBLIC_API_URL=$API_URL"
+              echo "NEXT_PUBLIC_COGNITO_REGION=$COG_REGION"
+              echo "NEXT_PUBLIC_COGNITO_USER_POOL_ID=$COG_POOL"
+              echo "NEXT_PUBLIC_COGNITO_CLIENT_ID=$COG_CLIENT"
+              echo "NEXT_PUBLIC_COGNITO_DOMAIN=$COG_DOMAIN"
+            } >> "$GITHUB_ENV"
+            echo "live build: NEXT_PUBLIC_* baked from terraform outputs (Cognito sign-in enabled)"
+          else
+            echo "::warning::one or more next_public_* terraform outputs are empty - building fixture-only. Explorer stays in Day-1 fixture mode; this is NOT a live build."
+          fi
       - name: Setup pnpm
         uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4.3.0
         with:
@@ -138,31 +293,18 @@ jobs:
         with:
           node-version: "22"
       - name: pnpm build
+        # NEXT_PUBLIC_* (if the step above set them) are already in $GITHUB_ENV
+        # and inherited here — Next.js inlines them at this build step, not at
+        # runtime, so they must be present before `pnpm build`, never after.
         working-directory: web
         run: |
           pnpm install
           pnpm build
-      - name: Configure AWS credentials (OIDC)
-        if: env.AWS_ROLE_ARN != ''
-        uses: aws-actions/configure-aws-credentials@7474bc4690e29a8392af63c5b98e7449536d5c3a # v4.3.1
-        with:
-          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
-          aws-region: us-east-1
-      - name: Setup Terraform 1.9
-        if: env.AWS_ROLE_ARN != '' && needs.gate.outputs.infra == 'true'
-        uses: hashicorp/setup-terraform@b9cd54a3c349d3f38e8881555d616ced269862dd # v3.1.2
-        with:
-          terraform_version: "1.9.8"
-          terraform_wrapper: false
       - name: s3 sync + CloudFront invalidate
         if: env.AWS_ROLE_ARN != '' && needs.gate.outputs.infra == 'true'
-        working-directory: infra
         run: |
-          terraform init -input=false
-          BUCKET="$(terraform output -raw web_bucket)"
-          DIST="$(terraform output -raw cloudfront_distribution_id)"
-          aws s3 sync ../web/out "s3://${BUCKET}" --delete
-          aws cloudfront create-invalidation --distribution-id "${DIST}" --paths "/*"
+          aws s3 sync web/out "s3://${TV_WEB_BUCKET}" --delete
+          aws cloudfront create-invalidation --distribution-id "${TV_CF_DIST_ID}" --paths "/*"
       - name: Skip sync (no OIDC or infra)
         if: env.AWS_ROLE_ARN == '' || needs.gate.outputs.infra != 'true'
         run: echo "skip s3 sync / CloudFront invalidate (need AWS_ROLE_ARN + infra/)"
