@@ -82,6 +82,12 @@ resource "aws_cognito_user" "tenant_a" {
   }
 
   message_action = "SUPPRESS"
+
+  # Password is set once at create (or via Cognito admin). Apply must not
+  # rotate judge logins when deploy only has plan-only placeholder TF_VARs.
+  lifecycle {
+    ignore_changes = [password]
+  }
 }
 
 resource "aws_cognito_user" "tenant_b" {
@@ -97,6 +103,10 @@ resource "aws_cognito_user" "tenant_b" {
   }
 
   message_action = "SUPPRESS"
+
+  lifecycle {
+    ignore_changes = [password]
+  }
 }
 
 resource "aws_cognito_user_in_group" "tenant_a_viewer" {
