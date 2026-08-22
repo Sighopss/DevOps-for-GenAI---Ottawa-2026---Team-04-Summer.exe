@@ -129,4 +129,4 @@ Both lockfiles (`sdk/uv.lock`, `demo-app/uv.lock`) are committed for reproducibi
 | Is anything sent to a third party? | No. AWS services in our own account only |
 | What if the model provider is down? | Second permitted model id, or the disclosed fake mode. The vault is unaffected — it makes no model calls. |
 
-**Recorded gaps:** the live converse path hardcodes `cost_usd = 0.0`, so real spend is not yet computed per span (Trevor). The embedding IAM gap is closed — Titan Embed V2 is on `bedrock_model_ids`.
+**Recorded gaps:** none open here as of 2026-08-22 — the live converse path now computes `cost_usd` from real usage tokens via a per-model rate table (`demo_app/pricing.py`, #118); an unknown model id is never silently reported as `0.0`, it logs loudly and the span attributes carry `known=False`. The embedding IAM gap is closed — Titan Embed V2 is on `bedrock_model_ids`.
