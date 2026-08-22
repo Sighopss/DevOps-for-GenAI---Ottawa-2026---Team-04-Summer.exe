@@ -1,8 +1,14 @@
 data "archive_file" "lambda" {
   type        = "zip"
-  source_dir  = local.lambda_src
   output_path = "${path.module}/.build/lambda.zip"
-  excludes    = local.lambda_excludes
+
+  dynamic "source" {
+    for_each = local.lambda_files
+    content {
+      content  = file(source.value)
+      filename = source.key
+    }
+  }
 }
 
 resource "aws_lambda_function" "ingest" {

@@ -16,10 +16,27 @@ locals {
 
   repo_root     = abspath("${path.module}/..")
   vault_present = length(fileset(local.repo_root, "vault/**/*.py")) > 0
-  lambda_src    = local.vault_present ? local.repo_root : "${path.module}/stubs/placeholder"
-  lambda_excludes = local.vault_present ? [
-    for f in fileset(local.repo_root, "**") : f if !startswith(f, "vault/")
-  ] : []
+  # Lambda bundle contents as {path-in-zip => path-on-disk}.
+  #
+  # This used to be source_dir = repo_root plus an exclude list built by walking
+  # the whole repo. That walk covers infra/.terraform/ and vault/**/__pycache__,
+  # both of which change *while Terraform runs*, so the file set differed between
+  # plan and apply and the run died with "fileset returned an inconsistent
+  # result". That is why no Lambda ever got created. Enumerating only vault/**.py
+  # is deterministic: nothing under vault/ changes during an apply.
+  #
+  # It also stops shipping 24 test files and stale .pyc into production.
+  lambda_py = setunion(
+    fileset("${local.repo_root}/vault", "*.py"),
+    fileset("${local.repo_root}/vault", "**/*.py"),
+  )
+  lambda_files = local.vault_present ? {
+    for f in local.lambda_py : "vault/${f}" => "${local.repo_root}/vault/${f}"
+    if !startswith(f, "tests/")
+    } : {
+    for f in fileset("${path.module}/stubs/placeholder", "**") :
+    f => "${abspath(path.module)}/stubs/placeholder/${f}"
+  }
 
   bedrock_model_arns = concat(
     [
