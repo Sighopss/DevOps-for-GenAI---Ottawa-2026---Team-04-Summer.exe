@@ -17,6 +17,10 @@ Next.js 15 App Router, output export, Cognito hosted UI, fixtures then GET /v1/t
 
 On-call ML/SRE reconstructing one AI request. One welcome gate at `/`, then operate. Not a campaign site.
 
+## Elevator Pitch
+
+TraceVault helps an on-call ML/SRE replay one AI request end to end without turning observability into another leak path. Instead of bouncing between logs, traces, and ad hoc notes, the operator gets one tenant-scoped view for latency, RAG hops, tokens, cost, and redaction state.
+
 ## Product Purpose
 
 Replay one request (LLM, tools, RAG, cost, errors) without storing raw prompts or PII.
@@ -28,6 +32,10 @@ Operational, high-trust, fail-closed. Calm under pressure, precise, and governan
 ## Positioning
 
 Write-time redaction, tenant isolation. Not Grafana. Not Langfuse.
+
+## Adoption Argument
+
+The honest number in this build is workflow compression: four operator questions collapse into one screen. What happened, where time went, what the model spent, and whether data was withheld all land in one exported explorer view, while raw prompts never persist and traces expire after seven days.
 
 ## Anti-references
 

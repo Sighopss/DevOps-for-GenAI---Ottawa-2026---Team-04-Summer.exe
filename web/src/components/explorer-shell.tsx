@@ -24,7 +24,10 @@ import {
   formatCurrency,
   formatDuration,
   formatTimestamp,
+  formatTtl,
+  findPrimaryModel,
   getRagHops,
+  getSpanErrorMessage,
   getSpanDepths,
   summarizeFlight,
   summarizeFlightItem,
@@ -44,14 +47,21 @@ type ExplorerShellProps = {
   fixtures: FixtureDataset;
 };
 
+type RequestFailure = {
+  status: number | null;
+  code: string | null;
+  message: string;
+};
+
 type ExplorerContentProps = {
   auditError: string | null;
   auditEvents: AuditEvent[];
-  detailError: string | null;
+  detailFailure: RequestFailure | null;
   detailStatus: "idle" | "loading" | "ready" | "forbidden" | "error";
   fixtureForbiddenTraceId: string;
   flights: FlightListItem[];
   fixtures: FixtureDataset;
+  listFailure: RequestFailure | null;
   liveMode: boolean;
   onSelectTrace: (traceId: string) => void;
   onSelectTenant: (tenant: TenantId) => void;
@@ -76,14 +86,64 @@ function KindBadge({ kind }: { kind: TraceSpan["kind"] }) {
   return <span className={`kind-badge kind-${kind}`}>{kind}</span>;
 }
 
+function getFailureCopy(
+  failure: RequestFailure | null,
+  scope: "list" | "detail",
+): { title: string; copy: string } {
+  if (!failure) {
+    return scope === "list"
+      ? {
+          title: "Live list unavailable.",
+          copy: "The signed-in list could not be loaded.",
+        }
+      : {
+          title: "Trace detail unavailable.",
+          copy: "The trace detail could not be loaded.",
+        };
+  }
+
+  if (failure.code === "unreachable") {
+    return scope === "list"
+      ? {
+          title: "API unreachable.",
+          copy: "Could not reach GET /v1/traces*. Check NEXT_PUBLIC_API_URL and the read API deployment.",
+        }
+      : {
+          title: "API unreachable.",
+          copy: "Could not reach the read API for detail or audit. Check NEXT_PUBLIC_API_URL and the live read deployment.",
+        };
+  }
+
+  if (failure.status === 404 || failure.code === "not_found") {
+    return {
+      title: "Trace not found.",
+      copy: "This trace_id was not returned for the signed-in tenant.",
+    };
+  }
+
+  const statusLabel = failure.status ? `${failure.status} ` : "";
+  const codeLabel = failure.code ? `${failure.code}: ` : "";
+
+  return scope === "list"
+    ? {
+        title: "Live list unavailable.",
+        copy: `${statusLabel}${codeLabel}${failure.message}`.trim(),
+      }
+    : {
+        title: "Trace detail unavailable.",
+        copy: `${statusLabel}${codeLabel}${failure.message}`.trim(),
+      };
+}
+
 function ExplorerContent({
   auditError,
   auditEvents,
-  detailError,
+  detailFailure,
   detailStatus,
   fixtureForbiddenTraceId,
   flights,
   fixtures,
+  listFailure,
   liveMode,
   selectedTraceId,
   onSelectTrace,
@@ -97,6 +157,10 @@ function ExplorerContent({
   const detailSpans = useMemo(() => selectedDetail?.spans ?? EMPTY_SPANS, [selectedDetail]);
   const depths = useMemo(() => getSpanDepths(detailSpans), [detailSpans]);
   const ragHops = useMemo(() => getRagHops(detailSpans), [detailSpans]);
+  const modelName = useMemo(() => findPrimaryModel(detailSpans), [detailSpans]);
+  const maxDuration = useMemo(() => {
+    return detailSpans.reduce((max, span) => Math.max(max, span.durationMs), 0);
+  }, [detailSpans]);
   const isForbiddenState =
     detailStatus === "forbidden" ||
     (!liveMode &&
@@ -110,8 +174,12 @@ function ExplorerContent({
   const hasSignedInTenant = Boolean(signedInTenant);
   const noFlightsCopy = liveMode
     ? "No flights returned for the signed-in tenant yet."
-    : "Day 1 fixture ships one trace per tenant. Use the locked forbidden example for the 403 state.";
+    : selectedTenant === "tenant-b"
+      ? "Day 1 keeps tenant-a-rag.json as the only regular fixture. Tenant-b only gets the locked 403 contract example."
+      : "Day 1 uses contracts/fixtures/tenant-a-rag.json only.";
   const selectedTraceDisplay = selectedTraceId ?? "pending";
+  const detailFailureCopy = getFailureCopy(detailFailure, "detail");
+  const listFailureCopy = getFailureCopy(listFailure, "list");
 
   return (
     <main className="explorer-shell">
@@ -165,7 +233,12 @@ function ExplorerContent({
               {flights.length === 1 ? "1 flight" : `${flights.length} flights`}
             </span>
           </div>
-          {flights.length > 0 ? (
+          {listFailure ? (
+            <div className="empty-state">
+              <strong>{listFailureCopy.title}</strong>
+              <p>{listFailureCopy.copy}</p>
+            </div>
+          ) : flights.length > 0 ? (
             <>
               {flights.map((flight) => {
                 const summary = summarizeFlightItem(flight);
@@ -183,7 +256,10 @@ function ExplorerContent({
                       <strong>{summary.traceId}</strong>
                       <span>{summary.status}</span>
                     </div>
-                    <p>{summary.promptPreview}</p>
+                    <p className="masked-preview">
+                      <span className="inline-redacted">REDACTED</span>
+                      {summary.promptPreview}
+                    </p>
                     <dl className="flight-row__meta">
                       <div>
                         <dt>Tenant</dt>
@@ -238,13 +314,13 @@ function ExplorerContent({
             <section className="forbidden-panel">
               <p className="eyebrow">{liveMode ? "Live 403" : "Contracted 403"}</p>
               <h3>
-                {liveMode && detailError
-                  ? `403 ${detailError}`
+                {liveMode && detailFailure
+                  ? `403 ${detailFailure.message}`
                   : `${forbidden.expected_status} ${forbidden.expected_body.error.code}`}
               </h3>
               <p className="forbidden-copy">
-                {liveMode && detailError
-                  ? detailError
+                {liveMode && detailFailure
+                  ? `${detailFailure.code ?? "forbidden"}: ${detailFailure.message}`
                   : forbidden.expected_body.error.message}
               </p>
               <dl className="rag-hop__meta">
@@ -269,8 +345,8 @@ function ExplorerContent({
             </section>
           ) : detailStatus === "error" ? (
             <section className="empty-state">
-              <strong>Trace detail unavailable.</strong>
-              <p>{detailError ?? "The read path returned an unexpected response."}</p>
+              <strong>{detailFailureCopy.title}</strong>
+              <p>{detailFailureCopy.copy}</p>
             </section>
           ) : !selectedDetail || !selectedSummary ? (
             <section className="empty-state">
@@ -280,10 +356,12 @@ function ExplorerContent({
           ) : (
             <>
               <div className="summary-strip">
-                <Stat label="Start" value={formatTimestamp(selectedSummary.startTime)} />
-                <Stat label="End" value={formatTimestamp(selectedSummary.endTime)} />
+                <Stat label="Started" value={formatTimestamp(selectedSummary.startTime)} />
+                <Stat label="Latency" value={formatDuration(selectedSummary.durationMs)} />
+                <Stat label="Model" value={modelName} />
                 <Stat label="Tokens" value={String(totalTokens(detailSpans))} />
-                <Stat label="Cost" value={formatCurrency(selectedSummary.costUsd)} />
+                <Stat label="Cost USD" value={formatCurrency(selectedSummary.costUsd)} />
+                <Stat label="TTL" value={formatTtl(selectedDetail.expires_at)} />
               </div>
 
               <section className="waterfall-panel">
@@ -299,9 +377,19 @@ function ExplorerContent({
                     const tokenCount =
                       (span["gen_ai.usage.input_tokens"] ?? 0) +
                       (span["gen_ai.usage.output_tokens"] ?? 0);
+                    const errorMessage =
+                      span.status === "error" ? getSpanErrorMessage(span) ?? "Span failed." : null;
+                    const latencyWidth =
+                      maxDuration > 0
+                        ? `${Math.max((span.durationMs / maxDuration) * 100, 8)}%`
+                        : "0%";
 
                     return (
-                      <article className="waterfall-row" key={span.span_id} role="row">
+                      <article
+                        className={`waterfall-row ${span.status === "error" ? "is-error" : ""}`}
+                        key={span.span_id}
+                        role="row"
+                      >
                         <div
                           className="waterfall-row__span"
                           style={{ paddingInlineStart: `${depth * 20 + 12}px` }}
@@ -309,10 +397,27 @@ function ExplorerContent({
                           <KindBadge kind={span.kind} />
                           <div>
                             <strong>{span.name}</strong>
-                            <p>{span.prompt_preview ?? "No prompt preview stored."}</p>
+                            <p className="masked-preview">
+                              <span className="inline-redacted">REDACTED</span>
+                              {span.prompt_preview ?? "No prompt preview stored."}
+                            </p>
+                            <p className="waterfall-row__meta-line">
+                              <span>Status {span.status}</span>
+                              {span["gen_ai.request.model"] ? (
+                                <span>Model {span["gen_ai.request.model"]}</span>
+                              ) : null}
+                            </p>
+                            {errorMessage ? (
+                              <p className="waterfall-row__error">{errorMessage}</p>
+                            ) : null}
                           </div>
                         </div>
-                        <span>{formatDuration(span.durationMs)}</span>
+                        <div className="waterfall-row__latency">
+                          <div className="latency-meter" aria-hidden="true">
+                            <span style={{ width: latencyWidth }} />
+                          </div>
+                          <strong>{formatDuration(span.durationMs)}</strong>
+                        </div>
                         <span>{tokenCount > 0 ? tokenCount : "—"}</span>
                         <span>{formatCurrency(span.cost_usd)}</span>
                       </article>
@@ -333,7 +438,10 @@ function ExplorerContent({
                     <article className="rag-hop" key={hop.spanId}>
                       <div className="rag-hop__query">
                         <span>Masked query</span>
-                        <strong>{hop.maskedQuery}</strong>
+                        <strong>
+                          <span className="inline-redacted">REDACTED</span>
+                          {hop.maskedQuery}
+                        </strong>
                       </div>
                       <dl className="rag-hop__meta">
                         <div>
@@ -417,12 +525,12 @@ export function ExplorerShell({ fixtures }: ExplorerShellProps) {
   const [selectedTenant, setSelectedTenant] = useState<TenantId>("tenant-a");
   const [idToken, setIdToken] = useState<string | null>(null);
   const [liveFlights, setLiveFlights] = useState<FlightListItem[]>([]);
-  const [listError, setListError] = useState<string | null>(null);
+  const [listFailure, setListFailure] = useState<RequestFailure | null>(null);
   const [selectedDetail, setSelectedDetail] = useState<FlightDetail | null>(null);
   const [detailStatus, setDetailStatus] = useState<
     "idle" | "loading" | "ready" | "forbidden" | "error"
   >("idle");
-  const [detailError, setDetailError] = useState<string | null>(null);
+  const [detailFailure, setDetailFailure] = useState<RequestFailure | null>(null);
   const [auditEvents, setAuditEvents] = useState<AuditEvent[]>([]);
   const [auditError, setAuditError] = useState<string | null>(null);
   const selectedTraceId = searchParams.get("trace_id");
@@ -454,6 +562,7 @@ export function ExplorerShell({ fixtures }: ExplorerShellProps) {
     if (storedIdentity.tenantId) {
       setSelectedTenant(storedIdentity.tenantId);
       window.sessionStorage.setItem(TENANT_STORAGE_KEY, storedIdentity.tenantId);
+      setIsClientReady(true);
       return;
     }
 
@@ -469,13 +578,13 @@ export function ExplorerShell({ fixtures }: ExplorerShellProps) {
 
     if (!liveMode || !idToken) {
       setLiveFlights([]);
-      setListError(null);
+      setListFailure(null);
       return () => {
         cancelled = true;
       };
     }
 
-    setListError(null);
+    setListFailure(null);
 
     fetchFlights(idToken)
       .then((flights) => {
@@ -489,10 +598,18 @@ export function ExplorerShell({ fixtures }: ExplorerShellProps) {
           return;
         }
         if (error instanceof ApiError) {
-          setListError(`${error.status} ${error.code}: ${error.message}`);
+          setListFailure({
+            status: error.status,
+            code: error.code,
+            message: error.message,
+          });
           return;
         }
-        setListError("Live list fetch failed.");
+        setListFailure({
+          status: null,
+          code: "unreachable",
+          message: "Live list fetch failed.",
+        });
       });
 
     return () => {
@@ -507,7 +624,9 @@ export function ExplorerShell({ fixtures }: ExplorerShellProps) {
 
     const defaultTraceId = liveMode
       ? liveFlights[0]?.trace_id ?? null
-      : getDefaultFixtureTraceId(fixtures, selectedTenant);
+      : selectedTenant === "tenant-b"
+        ? fixtureForbiddenTraceId
+        : getDefaultFixtureTraceId(fixtures, selectedTenant);
     const fixtureTraceStillValid =
       !selectedTraceId ||
       Boolean(fixtures.detailsByTenant[selectedTenant][selectedTraceId]) ||
@@ -539,7 +658,7 @@ export function ExplorerShell({ fixtures }: ExplorerShellProps) {
   useEffect(() => {
     if (!liveMode) {
       setDetailStatus("ready");
-      setDetailError(null);
+      setDetailFailure(null);
       setAuditError(null);
       setAuditEvents([]);
 
@@ -561,7 +680,7 @@ export function ExplorerShell({ fixtures }: ExplorerShellProps) {
 
     let cancelled = false;
     setDetailStatus("loading");
-    setDetailError(null);
+    setDetailFailure(null);
     setAuditError(null);
     setAuditEvents([]);
 
@@ -580,11 +699,19 @@ export function ExplorerShell({ fixtures }: ExplorerShellProps) {
         setSelectedDetail(null);
         if (error instanceof ApiError) {
           setDetailStatus(error.status === 403 ? "forbidden" : "error");
-          setDetailError(`${error.code}: ${error.message}`);
+          setDetailFailure({
+            status: error.status,
+            code: error.code,
+            message: error.message,
+          });
           return;
         }
         setDetailStatus("error");
-        setDetailError("Live detail fetch failed.");
+        setDetailFailure({
+          status: null,
+          code: "unreachable",
+          message: "Live detail fetch failed.",
+        });
       });
 
     return () => {
@@ -640,11 +767,12 @@ export function ExplorerShell({ fixtures }: ExplorerShellProps) {
     <ExplorerContent
       auditError={auditError}
       auditEvents={auditEvents}
-      detailError={detailError ?? listError}
-      detailStatus={listError ? "error" : detailStatus}
+      detailFailure={detailFailure ?? listFailure}
+      detailStatus={listFailure ? "error" : detailStatus}
       fixtureForbiddenTraceId={fixtureForbiddenTraceId}
       flights={activeFlights}
       fixtures={fixtures}
+      listFailure={listFailure}
       liveMode={liveMode}
       onSelectTrace={setTrace}
       onSelectTenant={handleTenantChange}
@@ -670,11 +798,12 @@ export function ExplorerShellFallback({ fixtures }: ExplorerShellProps) {
     <ExplorerContent
       auditError={null}
       auditEvents={[]}
-      detailError={null}
+      detailFailure={null}
       detailStatus="ready"
       fixtureForbiddenTraceId={fixtures.forbidden.request.path.split("/").pop() ?? ""}
       flights={fixtures.flightsByTenant[selectedTenant]}
       fixtures={fixtures}
+      listFailure={null}
       liveMode={false}
       onSelectTrace={() => {}}
       onSelectTenant={() => {}}

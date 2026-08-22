@@ -43,7 +43,7 @@ export default function WelcomePage() {
           cost, and redaction state for an on-call operator who needs the truth fast.
         </p>
         <p className="limitation">
-          Stored prompts stay masked only, with a seven-day TTL and tenant-scoped reads.
+          Prompts are stored masked, never raw, and traces expire after seven days.
         </p>
         <div className="cta-row">
           {hostedUiEnabled ? (

@@ -36,16 +36,15 @@ export function loadFixtureData(): FixtureDataset {
   const tenantASpans = withDurations(tenantA.spans);
   const tenantBSpans = withDurations(tenantB.spans);
   const tenantADetail = detailFromSpans(tenantASpans);
-  const tenantBDetail = detailFromSpans(tenantBSpans);
 
   return {
     flightsByTenant: {
       "tenant-a": [flightListItemFromSpans(tenantASpans)],
-      "tenant-b": [flightListItemFromSpans(tenantBSpans)],
+      "tenant-b": [],
     },
     detailsByTenant: {
       "tenant-a": { [tenantADetail.trace_id]: tenantADetail },
-      "tenant-b": { [tenantBDetail.trace_id]: tenantBDetail },
+      "tenant-b": {},
     },
     forbidden: {
       ...tenantB,

@@ -131,6 +131,19 @@ export function getRagHops(spans: TraceSpan[]): RagHop[] {
     });
 }
 
+export function findPrimaryModel(spans: TraceSpan[]): string {
+  return (
+    spans.find((span) => typeof span["gen_ai.request.model"] === "string")?.[
+      "gen_ai.request.model"
+    ] ?? "No model stored."
+  );
+}
+
+export function getSpanErrorMessage(span: TraceSpan): string | null {
+  const message = span.attributes?.error_message;
+  return typeof message === "string" && message.trim().length > 0 ? message : null;
+}
+
 export function formatDuration(durationMs: number): string {
   if (durationMs < 1000) {
     return `${durationMs} ms`;
@@ -160,4 +173,12 @@ export function formatAuditTimestamp(timestamp: string): string {
     dateStyle: "medium",
     timeStyle: "short",
   }).format(new Date(timestamp));
+}
+
+export function formatTtl(expiresAt: number | null): string {
+  if (typeof expiresAt === "number" && Number.isFinite(expiresAt)) {
+    return formatTimestamp(new Date(expiresAt * 1000).toISOString());
+  }
+
+  return "7 day retention";
 }
