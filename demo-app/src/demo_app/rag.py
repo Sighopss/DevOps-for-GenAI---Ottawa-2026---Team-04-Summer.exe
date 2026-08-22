@@ -2,8 +2,10 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field
 from pathlib import Path
+from types import MappingProxyType
 from typing import Any
 
 CORPUS_DIR = Path(__file__).resolve().parents[2] / "corpus"
@@ -45,16 +47,24 @@ def load_documents() -> list[Document]:
 
 
 def get_doc_metadata(docs: list[Document], document_id: str) -> dict[str, Any]:
-    """Allowlisted retrieve tool. Unknown ids fail closed."""
+    """Allowlisted retrieve tool. Unknown ids and out-of-corpus paths fail closed."""
+    root = CORPUS_DIR.resolve()
     for doc in docs:
         if doc.doc_id == document_id:
+            resolved = doc.path.resolve()
+            if not resolved.is_relative_to(root) or resolved.suffix != ".md":
+                raise PermissionError("document is outside the allowlisted corpus")
             return {
                 "document_id": doc.doc_id,
                 "title": doc.title,
-                "path": doc.path.name,
+                "path": resolved.name,
                 "chars": len(doc.text),
             }
     raise KeyError("unknown document")
+
+
+Tool = Callable[[list[Document], str], dict[str, Any]]
+TOOL_REGISTRY: Mapping[str, Tool] = MappingProxyType({TOOL_NAME: get_doc_metadata})
 
 
 def retrieve_topk(docs: list[Document], query_embedding: list[float], k: int = RETRIEVE_TOP_K) -> list[Document]:

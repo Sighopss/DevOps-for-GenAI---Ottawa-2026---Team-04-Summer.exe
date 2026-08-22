@@ -19,7 +19,9 @@ Do **not** `terraform apply` until a human says so. This PR only needs `terrafor
 | `oidc.tf` | GitHub OIDC role **this repo + this stack only**. No `AKIA`. |
 | `secrets.tf` | Placeholder secrets for tenant ingest keys (values not in git) |
 | `cloudwatch.tf` | Lambda logs 7d. API 5xx ≥ 5 in 5 min. SNS only if `alarm_email` is set |
-| `iam.tf` | No `s3:*` / `dynamodb:*` / `bedrock:*` on `*` |
+| `iam.tf` | No `s3:*` / `dynamodb:*` / `bedrock:*` on `*`; design evidence in [`../docs/IAM_DESIGN.md`](../docs/IAM_DESIGN.md) |
+
+Capacity and abuse assumptions, including the 10× answer and limit behavior, are in [`../docs/SCALE.md`](../docs/SCALE.md). CI runs the IAM and capacity drift tests in `infra/tests/`.
 
 ## Remote state (issue #5 — do not close #5 here)
 

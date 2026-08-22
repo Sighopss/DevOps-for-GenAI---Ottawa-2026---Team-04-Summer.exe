@@ -6,15 +6,16 @@ data "archive_file" "lambda" {
 }
 
 resource "aws_lambda_function" "ingest" {
-  function_name    = "${local.name}-vault-ingest"
-  role             = aws_iam_role.ingest.arn
-  handler          = "vault.handlers.ingest.handler"
-  runtime          = "python3.12"
-  filename         = data.archive_file.lambda.output_path
-  source_code_hash = data.archive_file.lambda.output_base64sha256
-  timeout          = var.lambda_timeout_seconds
-  memory_size      = var.lambda_memory_mb
-  architectures    = ["x86_64"]
+  function_name                  = "${local.name}-vault-ingest"
+  role                           = aws_iam_role.ingest.arn
+  handler                        = "vault.handlers.ingest.handler"
+  runtime                        = "python3.12"
+  filename                       = data.archive_file.lambda.output_path
+  source_code_hash               = data.archive_file.lambda.output_base64sha256
+  timeout                        = var.lambda_timeout_seconds
+  memory_size                    = var.lambda_memory_mb
+  reserved_concurrent_executions = var.lambda_reserved_concurrency
+  architectures                  = ["x86_64"]
 
   environment {
     variables = {
@@ -30,15 +31,16 @@ resource "aws_lambda_function" "ingest" {
 }
 
 resource "aws_lambda_function" "read" {
-  function_name    = "${local.name}-vault-read"
-  role             = aws_iam_role.read.arn
-  handler          = "vault.handlers.read.handler"
-  runtime          = "python3.12"
-  filename         = data.archive_file.lambda.output_path
-  source_code_hash = data.archive_file.lambda.output_base64sha256
-  timeout          = var.lambda_timeout_seconds
-  memory_size      = var.lambda_memory_mb
-  architectures    = ["x86_64"]
+  function_name                  = "${local.name}-vault-read"
+  role                           = aws_iam_role.read.arn
+  handler                        = "vault.handlers.read.handler"
+  runtime                        = "python3.12"
+  filename                       = data.archive_file.lambda.output_path
+  source_code_hash               = data.archive_file.lambda.output_base64sha256
+  timeout                        = var.lambda_timeout_seconds
+  memory_size                    = var.lambda_memory_mb
+  reserved_concurrent_executions = var.lambda_reserved_concurrency
+  architectures                  = ["x86_64"]
 
   environment {
     variables = {
