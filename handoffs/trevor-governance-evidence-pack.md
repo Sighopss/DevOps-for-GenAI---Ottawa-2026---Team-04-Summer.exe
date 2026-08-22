@@ -92,17 +92,3 @@ Also noted, lower severity: the live converse path hardcodes `cost_usd = 0.0`, s
 ## Contract reminder
 
 Documentation and governance evidence only. The HTTP surface stays `contracts/http.md` and the span shape stays `contracts/span.schema.json`. Scoring text (P-01–P-15 map, Rubric 100, judge click-path) stays in the scratchbook by rule; this PR adds product-governance artifacts, which the handbook requires to live **in the product repo**, and links to the scratchbook for planning material. Nothing here claims a control is running when it is only configured — every such row says *reviewed-not-verified* and names the apply issue (#48).
-
-## Pickup prompt (paste into the other LLM)
-
-```
-Read this handoff, then SECURITY.md, GOVERNANCE.md, docs/ARCHITECTURE.md,
-and docs/AI_INVENTORY.md in this repo.
-Do not edit the claimed paths above.
-Every "not yet covered" cell is deliberate and verified — do not flip one to a
-test path unless that test exists and you ran it.
-Alexis: when vault/read + vault/audit land, four cells become real test paths
-(named under "What I need"). docs/DATA_AND_ABUSE.md (#39) is still yours.
-Michael: GOVERNANCE.md §5 Transparency lists the UI requirements from #59/#62.
-Do not merge to main — Trevor merges.
-```

@@ -87,13 +87,3 @@ Empty = incomplete PR. Copy from PLAN **Rubric 100** / P-ids.
 4. Fixture filenames are locked in `http.md`: `tenant-a-rag.json` and **`tenant-b-forbidden.json`** (the scratchbook Tree still says `tenant-b-pii.json` — fixed in scratchbook PR #12). Michael reads the names from `http.md`, not from PLAN.
 
 Ingest is **not** Cognito. Read JWT `custom:tenant_id` must match stored tenant → **403** not 404. `GET /health` returns `200 {"ok":true}` with **no Lambda** (see amendment 1). CORS origin = CloudFront URL only. Two Lambdas only: `vault-ingest` → `vault.handlers.ingest.handler`, `vault-read` → `vault.handlers.read.handler`. Hour 0 fixtures are **full flights** (one `trace_id`, parent-child spans), not a single span.
-
-## Pickup prompt (paste into the other LLM)
-
-```
-Read this handoff and contracts/http.md.
-Do not edit the claimed paths above.
-Continue your own mission using What I shipped.
-Do not merge to main — Trevor merges.
-Alexis: vault/ against this HTTP + schema. Michael: web/ against fixtures then GET /v1/traces*.
-```

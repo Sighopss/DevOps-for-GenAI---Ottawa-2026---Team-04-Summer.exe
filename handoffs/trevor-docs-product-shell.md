@@ -83,17 +83,3 @@ Empty = incomplete PR. Copy from PLAN **Rubric 100** / P-ids.
 ## Contract reminder
 
 Documentation shell only. This PR owns `README.md`, `AI_USAGE.md`, and the two handoff templates — it defines no API, no schema, and no infrastructure. The HTTP surface stays `contracts/http.md` and the span shape stays `contracts/span.schema.json`; where this README describes routes, tenants, redaction, or `/health`, it is restating those contracts, never amending them. If a contract changes, `contracts/` is edited first and this README follows.
-
-## Pickup prompt (paste into the other LLM)
-
-```
-Read this handoff and the ownership table in README.md.
-Do not edit the claimed paths above: README.md, AI_USAGE.md,
-handoffs/README.md, handoffs/PR.example.md.
-Copy handoffs/PR.example.md from THIS repo for your own PR and fill it completely,
-including the Handbook evidence block.
-Alexis / Michael: append only your own row to the table in AI_USAGE.md.
-Do not add PLAN.md, JUDGE.md, START.md, or skills/ content to this repo.
-Continue your own mission using What I shipped.
-Do not merge to main — Trevor merges.
-```

@@ -87,16 +87,3 @@ Renovate or Dependabot would keep these pins fresh automatically and is the norm
 ## Contract reminder
 
 CI and runbook only. This PR does not invent HTTP routes, touch the span schema, or change deploy behaviour. Deploy is still `main`-only; rollback is still re-running the last green `deploy.yml`. Ingest stays `X-Tenant-Key`; reads stay Cognito JWT.
-
-## Pickup prompt (paste into the other LLM)
-
-```
-Read this handoff and .github/workflows/trivy.yml.
-Every third-party action in this repo is pinned to a 40-char commit SHA with the
-exact semver in a trailing comment. A CI guard in trivy.yml enforces it on every
-PR and was verified against six regression cases.
-Do not reintroduce a bare @v tag. Do not replace a pin with a TODO.
-To bump a pin, follow "Updating a pinned GitHub Action" in make help — resolve
-the tag, dereference it if annotated, verify the commit, update the comment too.
-Do not merge to main — Trevor merges.
-```

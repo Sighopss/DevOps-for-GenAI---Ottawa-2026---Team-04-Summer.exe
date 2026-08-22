@@ -69,12 +69,3 @@ Two things to read against the amended `contracts/http.md` (PR #26):
 
 1. `/health` is **not** an API Gateway mock. HTTP API v2 has no `MOCK` integration type (WebSocket only), so `infra/api.tf` implements the route as `HTTP_PROXY` to a static `health.json` on the CloudFront origin. Still no Lambda, still `200 {"ok":true}`. Cost: `/health` is only green while CloudFront and that object are up.
 2. Token type is **unsettled and needs Trevor**: `http.md` says `GET /v1/traces*` carries a Cognito **access** token; this stack and `infra/README.md` tell Michael to send the **ID** token, because Cognito puts `custom:tenant_id` on the ID token only. The v2 JWT authorizer accepts either (it matches `aud` or `client_id`), so the mismatch would not fail at the gateway — it would surface as a missing `custom:tenant_id` in Alexis's `vault-read`. Pick one before the demo.
-
-## Pickup prompt (paste into the other LLM)
-
-```
-Read this handoff and PLAN.md.
-Do not edit the claimed paths above.
-Continue your own mission using What I shipped.
-Do not merge to main — Trevor merges.
-```

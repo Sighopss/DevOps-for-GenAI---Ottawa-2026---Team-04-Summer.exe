@@ -104,12 +104,3 @@ red-team evidence) are still open: the ordering bug is the kind that only shows
 up off the CI platform, so "green on Actions" is not by itself evidence for the
 audit trail's ordering guarantee. This PR gives that guarantee a test that holds
 on any platform.
-
-## Pickup prompt (paste into the other LLM)
-
-```
-Read this handoff and PLAN.md.
-Do not edit the claimed paths above.
-Continue your own mission using What I shipped.
-Do not merge to main — Trevor merges.
-```

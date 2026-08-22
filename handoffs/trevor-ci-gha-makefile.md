@@ -103,12 +103,3 @@ Human Trevor (OIDC role + Environments). `trevor-infra` before apply actually mu
 ## Contract reminder
 
 CI does not invent HTTP routes. Health is `GET /health` → `200 {"ok":true}`, unauthenticated, no Lambda, served as an `HTTP_PROXY` route to `health.json` on the CloudFront origin. Deploy is `main` only. Ingest stays `X-Tenant-Key`; reads stay Cognito JWT. This PR owns workflow YAML and the Makefile runbook only.
-
-## Pickup prompt (paste into the other LLM)
-
-```
-Read this handoff and PLAN.md.
-Do not edit the claimed paths above.
-Continue your own mission using What I shipped.
-Do not merge to main — Trevor merges.
-```
