@@ -17,6 +17,17 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4  # TODO: SHA-pin
 
+      # Unix-only guard. Cheap (~1s) and runs before the scans so a runner that
+      # cannot execute our POSIX shell scripts fails loudly instead of silently.
+      # Greenfield-safe: scripts/ belongs to another lane and may not exist yet.
+      - name: Unix toolchain guard (scripts/check_unix.sh)
+        run: |
+          if [ -f scripts/check_unix.sh ]; then
+            bash scripts/check_unix.sh
+          else
+            echo "skip: scripts/check_unix.sh missing (greenfield)"
+          fi
+
       - name: CycloneDX SBOM (P-14)
         uses: aquasecurity/trivy-action@v0.36.0  # TODO: SHA-pin (post-2026 tag hijack)
         with:
