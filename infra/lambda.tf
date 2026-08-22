@@ -19,6 +19,7 @@ resource "aws_lambda_function" "ingest" {
 
   environment {
     variables = {
+      VAULT_TTL_DAYS      = var.retention_days
       TABLE               = aws_dynamodb_table.traces.name
       BUCKET              = aws_s3_bucket.payload.id
       KEY_ARN             = aws_kms_key.data.arn
@@ -44,6 +45,7 @@ resource "aws_lambda_function" "read" {
 
   environment {
     variables = {
+      VAULT_TTL_DAYS      = var.retention_days
       TABLE               = aws_dynamodb_table.traces.name
       BUCKET              = aws_s3_bucket.payload.id
       KEY_ARN             = aws_kms_key.data.arn

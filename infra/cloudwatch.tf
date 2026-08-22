@@ -39,3 +39,10 @@ resource "aws_cloudwatch_metric_alarm" "api_5xx" {
 
   alarm_actions = var.alarm_email == "" ? [] : [aws_sns_topic.alarms[0].arn]
 }
+
+# API Gateway access logs. Same 7-day retention as the Lambda groups so the
+# whole request path expires together.
+resource "aws_cloudwatch_log_group" "api_access" {
+  name              = "/aws/apigateway/${local.name}-http"
+  retention_in_days = 7
+}

@@ -161,3 +161,26 @@ resource "aws_dynamodb_table" "traces" {
     kms_key_arn = aws_kms_key.data.arn
   }
 }
+
+# Payload objects must not outlive the DynamoDB row that points at them.
+# The vault code writes expires_at from VAULT_TTL_DAYS; both read
+# var.retention_days so the two cannot drift (issue #121).
+resource "aws_s3_bucket_lifecycle_configuration" "payload" {
+  bucket = aws_s3_bucket.payload.id
+
+  rule {
+    id     = "expire-with-dynamodb-ttl"
+    status = "Enabled"
+
+    filter {}
+
+    expiration {
+      days = var.retention_days
+    }
+
+    # A failed multipart upload otherwise bills forever and is invisible.
+    abort_incomplete_multipart_upload {
+      days_after_initiation = 1
+    }
+  }
+}
