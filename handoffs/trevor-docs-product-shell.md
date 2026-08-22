@@ -4,7 +4,7 @@
 - Human: `Trevor`
 - Agent id: `trevor-docs`
 - Branch: `trevor/docs/product-shell`
-- PR: `32`
+- PR: `37`
 - Mission file: Submission shell — product README, `AI_USAGE.md` (P-06), in-tree handoff template. Scratchbook `PLAN.md` **Submission pack (D2 PM)** + **Handbook (2026)**; no scratchbook mission file for this one.
 
 ## Claimed paths (collision)
