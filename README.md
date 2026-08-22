@@ -18,9 +18,19 @@ These are the four **targets** the build is aimed at, not a claim about what run
 
 ## Public URL
 
-**TBD — filled by Trevor after the first green `deploy.yml`.**
+**API — live.** `https://55qm437628.execute-api.us-east-1.amazonaws.com`
 
-Until that line holds a real CloudFront URL, treat the deployed product as not yet live. Nothing here invents a hostname.
+```console
+$ curl https://55qm437628.execute-api.us-east-1.amazonaws.com/health
+200 {"ok":true}
+```
+
+**Explorer UI — built, not published.** `https://d13b678j60bhap.cloudfront.net` answers **403** at `/`. The distribution is
+live, but the web bucket holds only `health.json`; `web/` landed on `main` in #75 and has not been
+built and uploaded.
+
+Applied 2026-08-22: 66 managed resources, both vault Lambdas, all five routes. What is *not* live is
+listed in **Demo integrity (P-15)** below — including one security control that cannot work as designed.
 
 ## Governance, security and evidence
 
@@ -60,7 +70,7 @@ Across the prior work, safe storage of observability data is treated as somethin
 TraceVault's contribution is to make two properties structural rather than optional:
 
 - **Write-time redaction, fail-closed.** The raw prompt is masked and hashed before anything is persisted. If redaction cannot complete, ingest returns `400 redaction_failed` and stores **nothing** — the failure mode is data loss, never a leak. **Implemented and tested** (`vault/`, 83 tests).
-- **Tenant isolation that returns 403, not 404.** A cross-tenant read is refused as forbidden rather than hidden as missing, so the boundary is observable and testable instead of silently indistinguishable from an empty result. **Contracted, not yet implemented** — see **Demo integrity (P-15)** below.
+- **Tenant isolation that returns 403, not 404.** A cross-tenant read is refused as forbidden rather than hidden as missing, so the boundary is observable and testable instead of silently indistinguishable from an empty result. **Implemented, tested and deployed** (`vault/read/tenant_guard.py`, `vault/tests/read/test_isolation.py`); not yet exercised against a live Cognito token — see **Demo integrity (P-15)** below.
 
 Both are frozen in [`contracts/`](contracts/). [`SECURITY.md`](SECURITY.md) maps each to the test that proves it, or states that it is not covered.
 
@@ -129,29 +139,43 @@ Stated plainly, because undisclosed mocks are a handbook red flag. Three differe
 - **Built** — code exists in this repo. Note what is on `main` versus still on an open PR.
 - **Deployed** — running on AWS at a public URL.
 
-**As of this commit, nothing is deployed.** No `terraform apply` has run, `deploy.yml` has not run, and there is no public URL — which is why the **Public URL** line above still says TBD. Every lane except Michael's `web/` is now merged to `main` and its tests pass locally; what none of it has is a running environment.
+**As of 2026-08-22 the stack is applied and the API is live.** 66 managed resources, both vault
+Lambdas (`vault.handlers.ingest.handler` / `vault.handlers.read.handler`), and all five routes.
+Verified against AWS rather than against Terraform's output: `GET /health` → `200`,
+`GET /v1/traces` → `401` with no JWT, `POST /v1/traces` → `401` with no tenant key — the
+contracted fail-closed behaviour.
+
+Three things are **not** live, and they are the honest gaps:
+
+1. **The Explorer UI is not published.** `web/` is on `main` (#75), but nothing has been uploaded to
+   the web bucket, so CloudFront serves 403 at `/`.
+2. **No authenticated request has ever been made.** Every check above is unauthenticated. No real
+   flight has been ingested, so nothing has been redacted in production, and tenant isolation has not
+   been demonstrated end-to-end against a live token — only in tests.
+3. **WAF filters nothing.** The web ACL exists but is associated with no resource. See
+   [`SECURITY.md`](SECURITY.md).
 
 Verify the built column yourself:
 
 ```bash
-py -m pytest vault -q                                        # 83 passed
+py -m pytest vault -q                                        # 109 passed
 cd sdk && uv run pytest -q                                   # 3 passed
 cd demo-app && TRACEVAULT_FAKE_BEDROCK=1 uv run pytest -q     # 2 passed
 ```
 
 | Piece | Contracted | Built | Deployed | What that means today |
 |---|---|---|---|---|
-| CloudFront, Cognito, HTTP API, KMS, DynamoDB, S3 | Yes | Yes — `infra/` on `main`, `terraform validate` passes | **No** | Terraform is merged but has **never been applied**. No live infrastructure, no URL. Every cloud control is reviewable in source and unverified in practice. |
-| Redaction on ingest (deny-list, Presidio optional) | Yes — `contracts/http.md` | **Yes** — `vault/redact/` + re-applied in `vault/ingest/` | **No** | Implemented and tested: fail-closed `redaction_failed` stores nothing, adversarial suite included. Presidio is optional and **absent in CI**, so the tested guarantee is deny-list-driven. Nothing has been redacted in production because there is no production. |
-| Ingest API (`POST /v1/traces`) | Yes — `contracts/http.md` | **Yes** — `vault/handlers/ingest.py` | **No** | Tenant-key auth, schema validation, tenant-scoped writes, S3-then-Dynamo commit order. Runs against injected fakes in tests, never against real AWS. |
-| Read + audit API (`GET /v1/traces*`, 403, audit rows) | Yes — `contracts/http.md` | **No — not yet implemented** | **No** | `vault/read/`, `vault/audit/`, `vault/handlers/read.py` do not exist (issues #15, #16, #18). **403-not-404 has no code and no test.** The error envelope is frozen and `vault/errors.py` emits the exact contracted `forbidden` body, but nothing calls it. This is the biggest open gap. |
+| CloudFront, Cognito, HTTP API, KMS, DynamoDB, S3 | Yes | Yes — `infra/` on `main` | **Yes** — applied 2026-08-22 | 66 managed resources live; `GET /health` → `200` from the public internet. **Exception:** the WAF web ACL exists but is attached to nothing — `aws_wafv2_web_acl_association` cannot target an HTTP API. |
+| Redaction on ingest (deny-list, Presidio optional) | Yes — `contracts/http.md` | **Yes** — `vault/redact/` + re-applied in `vault/ingest/` | **Yes** — in both Lambdas | Implemented and tested: fail-closed `redaction_failed` stores nothing, adversarial suite included. Presidio is optional and **absent in CI**, so the tested guarantee is deny-list-driven. The code is deployed, but **no real traffic has been ingested**, so nothing has been redacted in production yet. |
+| Ingest API (`POST /v1/traces`) | Yes — `contracts/http.md` | **Yes** — `vault/handlers/ingest.py` | **Yes** — `tracevault-dev-vault-ingest` | Tenant-key auth, schema validation, tenant-scoped writes, S3-then-Dynamo commit order. Live and fail-closed (`401` without a key). **Never exercised with a valid key**, so the write path is proven only against injected fakes. |
+| Read + audit API (`GET /v1/traces*`, 403, audit rows) | Yes — `contracts/http.md` | **Yes** — `vault/read/`, `vault/audit/`, `vault/handlers/read.py` (#68, #69, #71) | **Yes** — `tracevault-dev-vault-read` | 403-not-404 has code and tests (`vault/read/tenant_guard.py`, `vault/tests/read/test_isolation.py`). Live and returning `401` without a JWT. **Not yet exercised with a real Cognito token**, so cross-tenant refusal is proven in tests, not in production. |
 | Bedrock model call | Yes | Yes — `demo-app/` on `main` | **No** | A real Bedrock call **unless** `TRACEVAULT_FAKE_BEDROCK=1`, which returns a canned response. Every test to date has used the fake. If we demo with it set, we say so out loud. The embedding model is not yet in the IAM allowlist — see [`docs/AI_INVENTORY.md`](docs/AI_INVENTORY.md). |
 | Span emission (SDK) | Yes — `contracts/span.schema.json` | Yes — `sdk/` on `main` | **No** | Emits schema-shaped spans with masked preview + `prompt_hash`. |
-| Explorer, Day 1 (fixtures) | Yes — `contracts/fixtures/` | **No — not yet implemented** | **No** | `web/` does not exist. The fixtures it should render (`tenant-a-rag.json`, `tenant-b-forbidden.json`) **are** committed; there is no UI rendering them. |
-| Explorer, Day 2 (live data) | Yes | **No** | **No** | Needs both `web/` and the read handler. Neither exists. |
+| Explorer, Day 1 (fixtures) | Yes — `contracts/fixtures/` | **Yes** — `web/` on `main` (#75), Playwright specs | **No** | The fixture-backed explorer renders list, detail, masked PII and the contracted forbidden UI. **Nothing is uploaded to the web bucket**, which holds only `health.json`, so CloudFront serves 403 at `/`. Built, not published. |
+| Explorer, Day 2 (live data) | Yes | **Partial** — `web/` renders fixtures; `web/src/lib/cognito.ts` exists | **No** | Both prerequisites now exist (`web/` and a deployed read handler), but the UI is still fixture-backed and has not been pointed at the live API. |
 | Ingest URL unset | Yes | Yes — `sdk/` on `main` | n/a | With `TRACEVAULT_INGEST_URL` unset the SDK does **not** POST — it writes `sdk/.last-flight.json` locally and does not crash. That local file is a fallback, **not** the product. |
 
-Demo data is **synthetic** PII only. The privacy properties this product is built to have — raw prompts never persisted, only `prompt_hash` plus a masked `prompt_preview`, DynamoDB TTL 7 days, Lambda logs 7 days — are implemented and tested for the ingest path; the retention values are configured in Terraform and unverified until an apply. Tenant isolation is contracted only. [`SECURITY.md`](SECURITY.md) maps every threat to the test that proves it, or says plainly that it is not covered.
+Demo data is **synthetic** PII only. The privacy properties this product is built to have — raw prompts never persisted, only `prompt_hash` plus a masked `prompt_preview`, DynamoDB TTL 7 days, Lambda logs 7 days — are implemented and tested for the ingest path; the retention values are configured in Terraform and applied, though no assertion re-checks them. Tenant isolation is implemented and tested, and unproven against live traffic. [`SECURITY.md`](SECURITY.md) maps every threat to the test that proves it, or says plainly that it is not covered.
 
 ## AI transparency
 
