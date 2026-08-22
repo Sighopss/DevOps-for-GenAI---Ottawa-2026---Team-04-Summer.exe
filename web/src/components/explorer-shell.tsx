@@ -1,13 +1,13 @@
 "use client";
 
+import Image from "next/image";
 import { startTransition, useEffect, useMemo, useState } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import {
-  ID_TOKEN_STORAGE_KEY,
-  TENANT_STORAGE_KEY,
-  persistIdTokenFromHash,
+  completeHostedUiSignIn,
   readIdTokenIdentity,
   readStoredIdToken,
+  TENANT_STORAGE_KEY,
 } from "@/lib/cognito";
 import { ApiError, fetchAuditEvents, fetchFlightDetail, fetchFlights, hasApiConfig } from "@/lib/api";
 import type {
@@ -20,32 +20,24 @@ import type {
   TraceSpan,
 } from "@/lib/types";
 import {
+  findPrimaryModel,
   formatAuditTimestamp,
   formatCurrency,
   formatDuration,
   formatTimestamp,
   formatTtl,
-  findPrimaryModel,
   getRagHops,
-  getSpanErrorMessage,
   getSpanDepths,
+  getSpanErrorMessage,
   summarizeFlight,
   summarizeFlightItem,
   totalTokens,
 } from "@/lib/flight";
 
 const EMPTY_SPANS: TraceSpan[] = [];
+const EXPLORER_PATH = "/explorer/";
 
-function getDefaultFixtureTraceId(
-  fixtures: FixtureDataset,
-  tenant: TenantId,
-): string | null {
-  return fixtures.flightsByTenant[tenant][0]?.trace_id ?? null;
-}
-
-type ExplorerShellProps = {
-  fixtures: FixtureDataset;
-};
+type DetailStatus = "idle" | "loading" | "ready" | "forbidden" | "error";
 
 type RequestFailure = {
   status: number | null;
@@ -53,11 +45,16 @@ type RequestFailure = {
   message: string;
 };
 
+type ExplorerShellProps = {
+  fixtures: FixtureDataset;
+};
+
 type ExplorerContentProps = {
   auditError: string | null;
   auditEvents: AuditEvent[];
+  authError: string | null;
   detailFailure: RequestFailure | null;
-  detailStatus: "idle" | "loading" | "ready" | "forbidden" | "error";
+  detailStatus: DetailStatus;
   fixtureForbiddenTraceId: string;
   flights: FlightListItem[];
   fixtures: FixtureDataset;
@@ -73,17 +70,21 @@ type ExplorerContentProps = {
   switcherDisabled: boolean;
 };
 
-function Stat({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="stat">
-      <span>{label}</span>
-      <strong>{value || "—"}</strong>
-    </div>
-  );
+function getDefaultFixtureTraceId(fixtures: FixtureDataset, tenant: TenantId): string | null {
+  return fixtures.flightsByTenant[tenant][0]?.trace_id ?? null;
 }
 
-function KindBadge({ kind }: { kind: TraceSpan["kind"] }) {
-  return <span className={`kind-badge kind-${kind}`}>{kind}</span>;
+function TraceVaultBrand({ compact = false }: { compact?: boolean }) {
+  return (
+    <Image
+      alt="TraceVault enterprise mark"
+      className={`brand-mark ${compact ? "brand-mark--compact" : ""}`}
+      height={4608}
+      src="/tracevault-enterprise.png"
+      unoptimized
+      width={3072}
+    />
+  );
 }
 
 function getFailureCopy(
@@ -97,8 +98,8 @@ function getFailureCopy(
           copy: "The signed-in list could not be loaded.",
         }
       : {
-          title: "Trace detail unavailable.",
-          copy: "The trace detail could not be loaded.",
+          title: "Selected flight unavailable.",
+          copy: "The selected trace could not be reconstructed.",
         };
   }
 
@@ -106,11 +107,11 @@ function getFailureCopy(
     return scope === "list"
       ? {
           title: "API unreachable.",
-          copy: "Could not reach GET /v1/traces*. Check NEXT_PUBLIC_API_URL and the read API deployment.",
+          copy: "Could not reach GET /v1/traces*. Check the live read deployment.",
         }
       : {
-          title: "API unreachable.",
-          copy: "Could not reach the read API for detail or audit. Check NEXT_PUBLIC_API_URL and the live read deployment.",
+          title: "Selected flight unavailable.",
+          copy: "Could not reach the read API for detail or audit.",
         };
   }
 
@@ -130,7 +131,7 @@ function getFailureCopy(
         copy: `${statusLabel}${codeLabel}${failure.message}`.trim(),
       }
     : {
-        title: "Trace detail unavailable.",
+        title: "Selected flight unavailable.",
         copy: `${statusLabel}${codeLabel}${failure.message}`.trim(),
       };
 }
@@ -138,6 +139,7 @@ function getFailureCopy(
 function ExplorerContent({
   auditError,
   auditEvents,
+  authError,
   detailFailure,
   detailStatus,
   fixtureForbiddenTraceId,
@@ -145,12 +147,12 @@ function ExplorerContent({
   fixtures,
   listFailure,
   liveMode,
-  selectedTraceId,
   onSelectTrace,
+  onSelectTenant,
   selectedDetail,
   selectedSummary,
   selectedTenant,
-  onSelectTenant,
+  selectedTraceId,
   signedInTenant,
   switcherDisabled,
 }: ExplorerContentProps) {
@@ -158,132 +160,161 @@ function ExplorerContent({
   const depths = useMemo(() => getSpanDepths(detailSpans), [detailSpans]);
   const ragHops = useMemo(() => getRagHops(detailSpans), [detailSpans]);
   const modelName = useMemo(() => findPrimaryModel(detailSpans), [detailSpans]);
-  const maxDuration = useMemo(() => {
-    return detailSpans.reduce((max, span) => Math.max(max, span.durationMs), 0);
+  const tokenCount = useMemo(() => totalTokens(detailSpans), [detailSpans]);
+  const firstPromptHash = useMemo(() => {
+    return detailSpans.find((span) => typeof span.prompt_hash === "string")?.prompt_hash ?? null;
   }, [detailSpans]);
+  const firstPromptPreview = useMemo(() => {
+    return detailSpans.find((span) => span.prompt_preview)?.prompt_preview ?? "No masked preview stored.";
+  }, [detailSpans]);
+  const rootStartMs = useMemo(() => {
+    return detailSpans.length > 0
+      ? Math.min(...detailSpans.map((span) => new Date(span.start_time).getTime()))
+      : 0;
+  }, [detailSpans]);
+  const totalTimelineMs = useMemo(() => {
+    if (detailSpans.length === 0) {
+      return 0;
+    }
+
+    const start = Math.min(...detailSpans.map((span) => new Date(span.start_time).getTime()));
+    const end = Math.max(...detailSpans.map((span) => new Date(span.end_time).getTime()));
+    return Math.max(end - start, 1);
+  }, [detailSpans]);
+  const listFailureCopy = getFailureCopy(listFailure, "list");
+  const detailFailureCopy = getFailureCopy(detailFailure, "detail");
+  const selectedTraceDisplay = selectedTraceId ?? "pending";
+  const summary = selectedSummary;
+  const hasSessionToken = Boolean(signedInTenant) || liveMode;
+  const modeLabel = liveMode ? "Live tenant read" : "Committed fixture replay";
+  const listTitle = liveMode ? "Flight list" : "Fixture flights";
+  const noFlightsCopy = liveMode
+    ? "No flights returned for the signed-in tenant yet."
+    : selectedTenant === "tenant-b"
+      ? "Tenant-b only gets the locked 403 contract example on Day 1."
+      : "Day 1 uses contracts/fixtures/tenant-a-rag.json only.";
   const isForbiddenState =
     detailStatus === "forbidden" ||
     (!liveMode &&
       selectedTenant === "tenant-b" &&
       selectedTraceId === fixtureForbiddenTraceId);
-  const hasStoredToken =
-    typeof window !== "undefined" &&
-    Boolean(window.sessionStorage.getItem(ID_TOKEN_STORAGE_KEY));
-  const sourceLabel = liveMode ? "Day 2 live GET /v1/traces*" : "Day 1 fixture only";
   const forbidden = fixtures.forbidden;
-  const hasSignedInTenant = Boolean(signedInTenant);
-  const noFlightsCopy = liveMode
-    ? "No flights returned for the signed-in tenant yet."
-    : selectedTenant === "tenant-b"
-      ? "Day 1 keeps tenant-a-rag.json as the only regular fixture. Tenant-b only gets the locked 403 contract example."
-      : "Day 1 uses contracts/fixtures/tenant-a-rag.json only.";
-  const selectedTraceDisplay = selectedTraceId ?? "pending";
-  const detailFailureCopy = getFailureCopy(detailFailure, "detail");
-  const listFailureCopy = getFailureCopy(listFailure, "list");
+  const signedInModeCopy = liveMode
+    ? signedInTenant
+      ? `Signed in as ${signedInTenant}. Reads stay tenant-scoped through the ID token.`
+      : "Live mode is enabled, but the stored token does not expose a tenant claim."
+    : "Fixture mode stays honest: one committed tenant-a flight, one locked tenant-b isolation proof.";
+  const liveAuditCopy =
+    "Live audit reads answer who opened the trace, when, and which tenant context applied.";
 
   return (
     <main className="explorer-shell">
       <section className="explorer-topbar">
-        <div>
-          <p className="eyebrow">Explorer / {sourceLabel}</p>
-          <h1>One flight. No raw prompt storage.</h1>
+        <div className="brand-cluster">
+          <TraceVaultBrand compact />
+          <div className="brand-copy">
+            <p className="eyebrow">{modeLabel}</p>
+            <p className="explorer-purpose">
+              Reconstruct one request fast: waterfall, hops, spend, redaction, and
+              isolation on one operator surface.
+            </p>
+            <p className="explorer-limitation">{signedInModeCopy}</p>
+          </div>
         </div>
-        <div className="tenant-strip">
-          <label className="tenant-switcher" htmlFor="tenant-switcher">
-            <span>Tenant</span>
-            <select
-              disabled={switcherDisabled}
-              id="tenant-switcher"
-              onChange={(event) =>
-                onSelectTenant(event.target.value as TenantId)
-              }
-              value={selectedTenant}
-            >
-              <option value="tenant-a">tenant-a</option>
-              <option value="tenant-b">tenant-b</option>
-            </select>
-          </label>
-          <span className="surface-badge">REDACTED</span>
-          <span className="surface-badge">{selectedTenant}</span>
-          <span className="surface-badge">TTL 7d</span>
-          <span className="surface-badge">
-            {hasStoredToken ? "ID token in sessionStorage" : "No live token yet"}
-          </span>
-          <span className="surface-badge">
-            {liveMode ? "Live read active" : "Fixture mode"}
-          </span>
+
+        <div className="operate-band">
+          <div className="tenant-band">
+            <label className="tenant-switcher" htmlFor="tenant-switcher">
+              <span>Tenant</span>
+              <select
+                disabled={switcherDisabled}
+                id="tenant-switcher"
+                onChange={(event) => onSelectTenant(event.target.value as TenantId)}
+                value={selectedTenant}
+              >
+                <option value="tenant-a">tenant-a</option>
+                <option value="tenant-b">tenant-b</option>
+              </select>
+            </label>
+            <span className="surface-badge surface-badge--accent">REDACTED</span>
+            <span className="surface-badge">{selectedTenant}</span>
+            <span className="surface-badge">{liveMode ? "Live mode" : "Fixture mode"}</span>
+          </div>
+          <p className="session-note">
+            {hasSessionToken ? "ID token held in sessionStorage." : "Preview-only session."}
+          </p>
         </div>
-        <p className="topbar-helper">
-          {liveMode
-            ? hasSignedInTenant
-              ? `Live reads follow the signed-in ID token for ${signedInTenant}. Re-authenticate to switch live tenants.`
-              : "Live API URL is present, but the stored token has no tenant claim. Use the Cognito ID token, not the access token."
-            : "Demo integrity: Day 1 stays on committed fixtures until a valid ID token and API URL are present."}
-        </p>
       </section>
+
+      {authError ? (
+        <section className="auth-callout" aria-live="polite">
+          <strong>Hosted sign-in did not complete.</strong>
+          <p>{authError}</p>
+        </section>
+      ) : null}
 
       <div className="explorer-grid">
         <aside className="flight-list-panel">
           <div className="panel-heading">
             <div>
-              <p className="eyebrow">Flights</p>
-              <h2>Signed-in list</h2>
+              <p className="eyebrow">List</p>
+              <h2>{listTitle}</h2>
             </div>
             <span className="count-pill">
               {flights.length === 1 ? "1 flight" : `${flights.length} flights`}
             </span>
           </div>
+
+          <div className="flight-list-legend" aria-hidden="true">
+            <span>trace_id</span>
+            <span>status</span>
+            <span>$</span>
+            <span>masked</span>
+          </div>
+
           {listFailure ? (
             <div className="empty-state">
               <strong>{listFailureCopy.title}</strong>
               <p>{listFailureCopy.copy}</p>
             </div>
           ) : flights.length > 0 ? (
-            <>
+            <div className="flight-list">
               {flights.map((flight) => {
-                const summary = summarizeFlightItem(flight);
+                const flightSummary = summarizeFlightItem(flight);
+                const isActive = selectedTraceId === flightSummary.traceId;
 
                 return (
                   <button
-                    className={`flight-row ${
-                      selectedTraceId === summary.traceId ? "is-active" : ""
-                    }`}
-                    key={summary.traceId}
-                    onClick={() => onSelectTrace(summary.traceId)}
+                    className={`flight-row ${isActive ? "is-active" : ""}`}
+                    key={flightSummary.traceId}
+                    onClick={() => onSelectTrace(flightSummary.traceId)}
                     type="button"
                   >
-                    <div className="flight-row__header">
-                      <strong>{summary.traceId}</strong>
-                      <span>{summary.status}</span>
+                    <div className="flight-row__trace">
+                      <strong>{flightSummary.traceId}</strong>
+                      <span>{formatTimestamp(flightSummary.startTime)}</span>
                     </div>
-                    <p className="masked-preview">
+                    <span className={`status-pill status-pill--${flightSummary.status}`}>
+                      {flightSummary.status}
+                    </span>
+                    <span className="flight-row__cost">
+                      {formatCurrency(flightSummary.costUsd)}
+                    </span>
+                    <div className="flight-row__preview">
                       <span className="inline-redacted">REDACTED</span>
-                      {summary.promptPreview}
-                    </p>
-                    <dl className="flight-row__meta">
-                      <div>
-                        <dt>Tenant</dt>
-                        <dd>{summary.tenantId}</dd>
-                      </div>
-                      <div>
-                        <dt>Duration</dt>
-                        <dd>{formatDuration(summary.durationMs)}</dd>
-                      </div>
-                      <div>
-                        <dt>Cost</dt>
-                        <dd>{formatCurrency(summary.costUsd)}</dd>
-                      </div>
-                    </dl>
+                      <span>{flightSummary.promptPreview}</span>
+                    </div>
                   </button>
                 );
               })}
-            </>
+            </div>
           ) : (
             <div className="empty-state">
               <strong>No flights to display.</strong>
               <p>{noFlightsCopy}</p>
             </div>
           )}
+
           {!liveMode && selectedTenant === "tenant-b" ? (
             <button
               className={`flight-row flight-row--ghost ${
@@ -292,38 +323,75 @@ function ExplorerContent({
               onClick={() => onSelectTrace(fixtureForbiddenTraceId)}
               type="button"
             >
-              <div className="flight-row__header">
+              <div className="flight-row__trace">
                 <strong>{fixtureForbiddenTraceId}</strong>
-                <span>forbidden</span>
+                <span>Isolation proof</span>
               </div>
-              <p>Locked contract example: tenant-b asks for a tenant-a trace and must see 403, not 404.</p>
+              <span className="status-pill status-pill--forbidden">403</span>
+              <span className="flight-row__cost">—</span>
+              <div className="flight-row__preview">
+                <span className="inline-redacted">REDACTED</span>
+                <span>Locked tenant-b example: same trace story, denied across tenants.</span>
+              </div>
             </button>
           ) : null}
         </aside>
 
         <section className="detail-panel">
-          <div className="panel-heading">
+          <div className="detail-heading">
             <div>
-              <p className="eyebrow">Flight detail</p>
-              <h2>Trace detail via `?trace_id=`</h2>
+              <p className="eyebrow">Selected flight</p>
+              <div className="detail-heading__row">
+                <span className="trace-chip">trace_id={selectedTraceDisplay}</span>
+                {summary ? (
+                  <span className={`status-pill status-pill--${summary.status}`}>{summary.status}</span>
+                ) : null}
+              </div>
             </div>
-            <span className="trace-chip">trace_id={selectedTraceDisplay}</span>
+
+            {summary ? (
+              <div className="summary-line" aria-label="Flight summary">
+                <div className="summary-metric">
+                  <span>started</span>
+                  <strong>{formatTimestamp(summary.startTime)}</strong>
+                </div>
+                <div className="summary-metric">
+                  <span>latency</span>
+                  <strong>{formatDuration(summary.durationMs)}</strong>
+                </div>
+                <div className="summary-metric">
+                  <span>model</span>
+                  <strong>{modelName}</strong>
+                </div>
+                <div className="summary-metric">
+                  <span>tokens</span>
+                  <strong>{tokenCount}</strong>
+                </div>
+                <div className="summary-metric">
+                  <span>$</span>
+                  <strong>{formatCurrency(summary.costUsd)}</strong>
+                </div>
+                <div className="summary-metric">
+                  <span>ttl</span>
+                  <strong>{selectedDetail ? formatTtl(selectedDetail.expires_at) : "7 day retention"}</strong>
+                </div>
+              </div>
+            ) : null}
           </div>
 
           {isForbiddenState ? (
             <section className="forbidden-panel">
-              <p className="eyebrow">{liveMode ? "Live 403" : "Contracted 403"}</p>
-              <h3>
-                {liveMode && detailFailure
-                  ? `403 ${detailFailure.message}`
-                  : `${forbidden.expected_status} ${forbidden.expected_body.error.code}`}
-              </h3>
+              <p className="eyebrow eyebrow--danger">{liveMode ? "Live 403" : "Contracted 403"}</p>
+              <div className="forbidden-panel__hero">
+                <strong>403</strong>
+                <h3>{detailFailure?.code ?? forbidden.expected_body.error.code}</h3>
+              </div>
               <p className="forbidden-copy">
                 {liveMode && detailFailure
-                  ? `${detailFailure.code ?? "forbidden"}: ${detailFailure.message}`
+                  ? detailFailure.message
                   : forbidden.expected_body.error.message}
               </p>
-              <dl className="rag-hop__meta">
+              <dl className="forbidden-grid">
                 <div>
                   <dt>Attempted trace</dt>
                   <dd>{selectedTraceDisplay}</dd>
@@ -340,181 +408,251 @@ function ExplorerContent({
             </section>
           ) : detailStatus === "loading" ? (
             <section className="empty-state">
-              <strong>Loading trace detail.</strong>
-              <p>Fetching list/detail/audit through the read contract.</p>
+              <strong>Loading selected flight.</strong>
+              <p>Reconstructing list, detail, and audit against the read contract.</p>
             </section>
           ) : detailStatus === "error" ? (
             <section className="empty-state">
               <strong>{detailFailureCopy.title}</strong>
               <p>{detailFailureCopy.copy}</p>
             </section>
-          ) : !selectedDetail || !selectedSummary ? (
+          ) : !selectedDetail || !summary ? (
             <section className="empty-state">
-              <strong>No trace selected yet.</strong>
+              <strong>No flight selected yet.</strong>
               <p>Choose a flight from the list to reconstruct one request.</p>
             </section>
           ) : (
-            <>
-              <div className="summary-strip">
-                <Stat label="Started" value={formatTimestamp(selectedSummary.startTime)} />
-                <Stat label="Latency" value={formatDuration(selectedSummary.durationMs)} />
-                <Stat label="Model" value={modelName} />
-                <Stat label="Tokens" value={String(totalTokens(detailSpans))} />
-                <Stat label="Cost USD" value={formatCurrency(selectedSummary.costUsd)} />
-                <Stat label="TTL" value={formatTtl(selectedDetail.expires_at)} />
-              </div>
-
-              <section className="waterfall-panel">
-                <div className="section-heading">
-                  <div>
-                    <p className="eyebrow">Waterfall</p>
-                    <h3>Parent-child, latency, tokens, and cost</h3>
+            <div className="detail-grid">
+              <div className="detail-main">
+                <section className="waterfall-panel">
+                  <div className="section-heading">
+                    <div>
+                      <p className="eyebrow">Waterfall</p>
+                      <h3>Timeline reconstruction</h3>
+                    </div>
                   </div>
-                </div>
-                <div className="waterfall-table" role="table" aria-label="Flight waterfall">
-                  {detailSpans.map((span) => {
-                    const depth = depths.get(span.span_id) ?? 0;
-                    const tokenCount =
-                      (span["gen_ai.usage.input_tokens"] ?? 0) +
-                      (span["gen_ai.usage.output_tokens"] ?? 0);
-                    const errorMessage =
-                      span.status === "error" ? getSpanErrorMessage(span) ?? "Span failed." : null;
-                    const latencyWidth =
-                      maxDuration > 0
-                        ? `${Math.max((span.durationMs / maxDuration) * 100, 8)}%`
-                        : "0%";
 
-                    return (
-                      <article
-                        className={`waterfall-row ${span.status === "error" ? "is-error" : ""}`}
-                        key={span.span_id}
-                        role="row"
-                      >
-                        <div
-                          className="waterfall-row__span"
-                          style={{ paddingInlineStart: `${depth * 20 + 12}px` }}
+                  <div className="timeline-axis" aria-hidden="true">
+                    {[0, 0.25, 0.5, 0.75, 1].map((stop) => (
+                      <span key={stop} style={{ left: `${stop * 100}%` }}>
+                        {Math.round(totalTimelineMs * stop)} ms
+                      </span>
+                    ))}
+                  </div>
+
+                  <div className="waterfall-table">
+                    {detailSpans.map((span) => {
+                      const depth = depths.get(span.span_id) ?? 0;
+                      const startMs = new Date(span.start_time).getTime();
+                      const leftPct = ((startMs - rootStartMs) / totalTimelineMs) * 100;
+                      const widthPct = Math.max((span.durationMs / totalTimelineMs) * 100, 4);
+                      const tokenLabel =
+                        (span["gen_ai.usage.input_tokens"] ?? 0) +
+                        (span["gen_ai.usage.output_tokens"] ?? 0);
+                      const errorMessage =
+                        span.status === "error" ? getSpanErrorMessage(span) ?? "Span failed." : null;
+
+                      return (
+                        <article
+                          className={`waterfall-row ${span.status === "error" ? "is-error" : ""}`}
+                          key={span.span_id}
                         >
-                          <KindBadge kind={span.kind} />
-                          <div>
-                            <strong>{span.name}</strong>
-                            <p className="masked-preview">
-                              <span className="inline-redacted">REDACTED</span>
-                              {span.prompt_preview ?? "No prompt preview stored."}
-                            </p>
-                            <p className="waterfall-row__meta-line">
+                          <div
+                            className="waterfall-row__identity"
+                            style={{ paddingInlineStart: `${depth * 18}px` }}
+                          >
+                            <div className="waterfall-row__name">
+                              <KindBadge kind={span.kind} />
+                              <strong>{span.name}</strong>
+                            </div>
+                            <p className="waterfall-row__meta">
                               <span>Status {span.status}</span>
                               {span["gen_ai.request.model"] ? (
-                                <span>Model {span["gen_ai.request.model"]}</span>
+                                <span>{span["gen_ai.request.model"]}</span>
                               ) : null}
                             </p>
                             {errorMessage ? (
                               <p className="waterfall-row__error">{errorMessage}</p>
                             ) : null}
                           </div>
-                        </div>
-                        <div className="waterfall-row__latency">
-                          <div className="latency-meter" aria-hidden="true">
-                            <span style={{ width: latencyWidth }} />
-                          </div>
-                          <strong>{formatDuration(span.durationMs)}</strong>
-                        </div>
-                        <span>{tokenCount > 0 ? tokenCount : "—"}</span>
-                        <span>{formatCurrency(span.cost_usd)}</span>
-                      </article>
-                    );
-                  })}
-                </div>
-              </section>
 
-              <section className="rag-panel">
-                <div className="section-heading">
-                  <div>
-                    <p className="eyebrow">RAG hops</p>
-                    <h3>Masked query, document IDs, and scores</h3>
-                  </div>
-                </div>
-                <div className="rag-list">
-                  {ragHops.map((hop) => (
-                    <article className="rag-hop" key={hop.spanId}>
-                      <div className="rag-hop__query">
-                        <span>Masked query</span>
-                        <strong>
-                          <span className="inline-redacted">REDACTED</span>
-                          {hop.maskedQuery}
-                        </strong>
-                      </div>
-                      <dl className="rag-hop__meta">
-                        <div>
-                          <dt>Document IDs</dt>
-                          <dd>{hop.documentIds.join(", ") || "—"}</dd>
-                        </div>
-                        <div>
-                          <dt>Scores</dt>
-                          <dd>{hop.scores.length > 0 ? hop.scores.join(", ") : "—"}</dd>
-                        </div>
-                        <div>
-                          <dt>Top K</dt>
-                          <dd>{hop.topK ?? "—"}</dd>
-                        </div>
-                      </dl>
-                    </article>
-                  ))}
-                </div>
-              </section>
-
-              <section className="audit-panel">
-                <div className="section-heading">
-                  <div>
-                    <p className="eyebrow">Audit trail</p>
-                    <h3>Audit / tenant strip</h3>
-                  </div>
-                </div>
-                {liveMode ? (
-                  auditError ? (
-                    <div className="empty-state compact-state">
-                      <strong>Audit fetch failed.</strong>
-                      <p>{auditError}</p>
-                    </div>
-                  ) : auditEvents.length > 0 ? (
-                    <div className="audit-list">
-                      {auditEvents.map((event) => (
-                        <article className="audit-row" key={`${event.actor}-${event.ts}`}>
-                          <div>
-                            <strong>{event.actor}</strong>
-                            <p>{formatAuditTimestamp(event.ts)}</p>
+                          <div className="waterfall-row__timeline">
+                            <div className="timeline-track" aria-hidden="true">
+                              <span
+                                className={`timeline-bar timeline-bar--${span.kind}`}
+                                style={{
+                                  left: `${Math.max(leftPct, 0)}%`,
+                                  width: `${Math.min(widthPct, 100)}%`,
+                                }}
+                              />
+                            </div>
                           </div>
-                          <dl className="audit-row__meta">
-                            <div>
-                              <dt>Tenant</dt>
-                              <dd>{event.tenant_id}</dd>
-                            </div>
-                            <div>
-                              <dt>Trace</dt>
-                              <dd>{event.trace_id}</dd>
-                            </div>
-                          </dl>
+
+                          <div className="waterfall-row__metrics">
+                            <span>{formatDuration(span.durationMs)}</span>
+                            <span>{tokenLabel > 0 ? `${tokenLabel} tok` : "—"}</span>
+                            <span>{span.cost_usd > 0 ? formatCurrency(span.cost_usd) : "—"}</span>
+                          </div>
                         </article>
-                      ))}
+                      );
+                    })}
+                  </div>
+                </section>
+
+                <section className="rag-panel">
+                  <div className="section-heading">
+                    <div>
+                      <p className="eyebrow">RAG hops</p>
+                      <h3>Masked query, doc ids, score</h3>
+                    </div>
+                  </div>
+
+                  {ragHops.length > 0 ? (
+                    <div className="rag-shell">
+                      <div className="rag-query">
+                        <span className="inline-redacted">REDACTED</span>
+                        <div>
+                          <strong>Prompt stored masked</strong>
+                          <p>{ragHops[0]?.maskedQuery ?? firstPromptPreview}</p>
+                        </div>
+                      </div>
+
+                      <div className="rag-table" role="table" aria-label="RAG hops">
+                        <div className="rag-table__header" role="row">
+                          <span role="columnheader">doc_id</span>
+                          <span role="columnheader">score</span>
+                          <span role="columnheader">top_k</span>
+                        </div>
+                        {ragHops.map((hop) => (
+                          <div className="rag-table__row" key={hop.spanId} role="row">
+                            <span role="cell">{hop.documentIds.join(", ") || "—"}</span>
+                            <span role="cell">{hop.scores.join(", ") || "—"}</span>
+                            <span role="cell">{hop.topK ?? "—"}</span>
+                          </div>
+                        ))}
+                      </div>
                     </div>
                   ) : (
                     <div className="empty-state compact-state">
-                      <strong>Audit row pending.</strong>
-                      <p>The live route writes an audit row on GET detail/audit, then returns it here.</p>
+                      <strong>No RAG hops captured.</strong>
+                      <p>This selected flight does not include retrieval steps.</p>
                     </div>
-                  )
-                ) : (
-                  <div className="empty-state compact-state">
-                    <strong>Fixture mode does not invent audit rows.</strong>
-                    <p>Day 2 live GET `/v1/traces/{'{trace_id}'}/audit` writes and returns tenant-scoped events.</p>
+                  )}
+                </section>
+              </div>
+
+              <aside className="detail-aside">
+                <section className="governance-panel">
+                  <div className="section-heading">
+                    <div>
+                      <p className="eyebrow">Governance</p>
+                      <h3>REDACTED proof</h3>
+                    </div>
                   </div>
-                )}
-              </section>
-            </>
+
+                  <div className="governance-hero">
+                    <span className="inline-redacted inline-redacted--hero">REDACTED</span>
+                    <p>{firstPromptPreview}</p>
+                  </div>
+
+                  <dl className="governance-grid">
+                    <div>
+                      <dt>prompt_hash</dt>
+                      <dd>{firstPromptHash ?? "No prompt hash stored."}</dd>
+                    </div>
+                    <div>
+                      <dt>model</dt>
+                      <dd>{modelName}</dd>
+                    </div>
+                    <div>
+                      <dt>tokens</dt>
+                      <dd>{tokenCount}</dd>
+                    </div>
+                    <div>
+                      <dt>$</dt>
+                      <dd>{formatCurrency(summary.costUsd)}</dd>
+                    </div>
+                    <div>
+                      <dt>retention</dt>
+                      <dd>{selectedDetail ? formatTtl(selectedDetail.expires_at) : "7 day retention"}</dd>
+                    </div>
+                  </dl>
+                </section>
+
+                <section className="audit-panel">
+                  <div className="section-heading">
+                    <div>
+                      <p className="eyebrow">Audit</p>
+                      <h3>Who opened this flight</h3>
+                    </div>
+                  </div>
+
+                  <div className="audit-band">
+                    <span>TTL 7d</span>
+                    <span>{liveMode ? liveAuditCopy : "Fixture mode shows the audit shape without inventing events."}</span>
+                  </div>
+
+                  {liveMode ? (
+                    auditError ? (
+                      <div className="empty-state compact-state">
+                        <strong>Audit fetch failed.</strong>
+                        <p>{auditError}</p>
+                      </div>
+                    ) : auditEvents.length > 0 ? (
+                      <div className="audit-list">
+                        {auditEvents.map((event) => (
+                          <article className="audit-row" key={`${event.actor}-${event.ts}`}>
+                            <div>
+                              <strong>{event.actor}</strong>
+                              <p>{formatAuditTimestamp(event.ts)}</p>
+                            </div>
+                            <dl className="audit-row__meta">
+                              <div>
+                                <dt>tenant</dt>
+                                <dd>{event.tenant_id}</dd>
+                              </div>
+                              <div>
+                                <dt>trace_id</dt>
+                                <dd>{event.trace_id}</dd>
+                              </div>
+                            </dl>
+                          </article>
+                        ))}
+                      </div>
+                    ) : (
+                      <div className="audit-skeleton">
+                        <div className="audit-skeleton__line" />
+                        <div className="audit-skeleton__row">
+                          <span>actor</span>
+                          <span>when</span>
+                          <span>trace_id</span>
+                        </div>
+                        <p>The live route writes and returns the audit row here.</p>
+                      </div>
+                    )
+                  ) : (
+                    <div className="audit-skeleton">
+                      <div className="audit-skeleton__line" />
+                      <div className="audit-skeleton__row">
+                        <span>actor</span>
+                        <span>when</span>
+                        <span>trace_id</span>
+                      </div>
+                      <p>Day 2 live GET writes the tenant-scoped audit row here.</p>
+                    </div>
+                  )}
+                </section>
+              </aside>
+            </div>
           )}
         </section>
       </div>
     </main>
   );
+}
+
+function KindBadge({ kind }: { kind: TraceSpan["kind"] }) {
+  return <span className={`kind-badge kind-badge--${kind}`}>{kind}</span>;
 }
 
 export function ExplorerShell({ fixtures }: ExplorerShellProps) {
@@ -524,12 +662,11 @@ export function ExplorerShell({ fixtures }: ExplorerShellProps) {
   const [isClientReady, setIsClientReady] = useState(false);
   const [selectedTenant, setSelectedTenant] = useState<TenantId>("tenant-a");
   const [idToken, setIdToken] = useState<string | null>(null);
+  const [authError, setAuthError] = useState<string | null>(null);
   const [liveFlights, setLiveFlights] = useState<FlightListItem[]>([]);
   const [listFailure, setListFailure] = useState<RequestFailure | null>(null);
   const [selectedDetail, setSelectedDetail] = useState<FlightDetail | null>(null);
-  const [detailStatus, setDetailStatus] = useState<
-    "idle" | "loading" | "ready" | "forbidden" | "error"
-  >("idle");
+  const [detailStatus, setDetailStatus] = useState<DetailStatus>("idle");
   const [detailFailure, setDetailFailure] = useState<RequestFailure | null>(null);
   const [auditEvents, setAuditEvents] = useState<AuditEvent[]>([]);
   const [auditError, setAuditError] = useState<string | null>(null);
@@ -553,24 +690,46 @@ export function ExplorerShell({ fixtures }: ExplorerShellProps) {
   }, [activeFlights, selectedDetail, selectedTraceId]);
 
   useEffect(() => {
-    persistIdTokenFromHash();
-    const token = readStoredIdToken();
-    setIdToken(token);
-    const storedTenant = window.sessionStorage.getItem(TENANT_STORAGE_KEY);
-    const storedIdentity = readIdTokenIdentity(token);
+    let cancelled = false;
 
-    if (storedIdentity.tenantId) {
-      setSelectedTenant(storedIdentity.tenantId);
-      window.sessionStorage.setItem(TENANT_STORAGE_KEY, storedIdentity.tenantId);
+    async function hydrateSession() {
+      let token: string | null = null;
+
+      try {
+        await completeHostedUiSignIn();
+        token = readStoredIdToken();
+      } catch {
+        token = readStoredIdToken();
+        if (!cancelled) {
+          setAuthError(
+            "Hosted sign-in returned, but TraceVault could not complete the token exchange.",
+          );
+        }
+      }
+
+      if (cancelled) {
+        return;
+      }
+
+      setIdToken(token);
+      const storedTenant = window.sessionStorage.getItem(TENANT_STORAGE_KEY);
+      const storedIdentity = readIdTokenIdentity(token);
+
+      if (storedIdentity.tenantId) {
+        setSelectedTenant(storedIdentity.tenantId);
+        window.sessionStorage.setItem(TENANT_STORAGE_KEY, storedIdentity.tenantId);
+      } else if (storedTenant === "tenant-a" || storedTenant === "tenant-b") {
+        setSelectedTenant(storedTenant);
+      }
+
       setIsClientReady(true);
-      return;
     }
 
-    if (storedTenant === "tenant-a" || storedTenant === "tenant-b") {
-      setSelectedTenant(storedTenant);
-    }
+    void hydrateSession();
 
-    setIsClientReady(true);
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   useEffect(() => {
@@ -632,14 +791,11 @@ export function ExplorerShell({ fixtures }: ExplorerShellProps) {
       Boolean(fixtures.detailsByTenant[selectedTenant][selectedTraceId]) ||
       (selectedTenant === "tenant-b" && selectedTraceId === fixtureForbiddenTraceId);
 
-    if (
-      defaultTraceId &&
-      (!selectedTraceId || (!liveMode && !fixtureTraceStillValid))
-    ) {
+    if (defaultTraceId && (!selectedTraceId || (!liveMode && !fixtureTraceStillValid))) {
       const next = new URLSearchParams(searchParams.toString());
       next.set("trace_id", defaultTraceId);
       startTransition(() => {
-        router.replace(`${pathname}?${next.toString()}`);
+        router.replace(`${pathname || EXPLORER_PATH}?${next.toString()}`);
       });
     }
   }, [
@@ -754,7 +910,7 @@ export function ExplorerShell({ fixtures }: ExplorerShellProps) {
     const next = new URLSearchParams(searchParams.toString());
     next.set("trace_id", traceId);
     startTransition(() => {
-      router.replace(`${pathname}?${next.toString()}`);
+      router.replace(`${pathname || EXPLORER_PATH}?${next.toString()}`);
     });
   };
 
@@ -767,8 +923,9 @@ export function ExplorerShell({ fixtures }: ExplorerShellProps) {
     <ExplorerContent
       auditError={auditError}
       auditEvents={auditEvents}
-      detailFailure={detailFailure ?? listFailure}
-      detailStatus={listFailure ? "error" : detailStatus}
+      authError={authError}
+      detailFailure={detailFailure}
+      detailStatus={detailStatus}
       fixtureForbiddenTraceId={fixtureForbiddenTraceId}
       flights={activeFlights}
       fixtures={fixtures}
@@ -778,8 +935,8 @@ export function ExplorerShell({ fixtures }: ExplorerShellProps) {
       onSelectTenant={handleTenantChange}
       selectedDetail={selectedDetail}
       selectedSummary={selectedSummary}
-      selectedTraceId={selectedTraceId}
       selectedTenant={selectedTenant}
+      selectedTraceId={selectedTraceId}
       signedInTenant={signedInTenant}
       switcherDisabled={liveMode && Boolean(signedInTenant)}
     />
@@ -798,6 +955,7 @@ export function ExplorerShellFallback({ fixtures }: ExplorerShellProps) {
     <ExplorerContent
       auditError={null}
       auditEvents={[]}
+      authError={null}
       detailFailure={null}
       detailStatus="ready"
       fixtureForbiddenTraceId={fixtures.forbidden.request.path.split("/").pop() ?? ""}
@@ -809,8 +967,8 @@ export function ExplorerShellFallback({ fixtures }: ExplorerShellProps) {
       onSelectTenant={() => {}}
       selectedDetail={selectedDetail}
       selectedSummary={selectedSummary}
-      selectedTraceId={selectedTraceId}
       selectedTenant={selectedTenant}
+      selectedTraceId={selectedTraceId}
       signedInTenant={null}
       switcherDisabled={false}
     />

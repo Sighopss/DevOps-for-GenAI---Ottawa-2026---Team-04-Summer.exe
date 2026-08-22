@@ -14,31 +14,31 @@ colors:
   danger: "#ff667b"
 typography:
   display:
-    fontFamily: "Aptos, Segoe UI, system-ui, sans-serif"
-    fontSize: "clamp(2.5rem, 5vw, 5.5rem)"
-    fontWeight: 800
-    lineHeight: 0.94
-    letterSpacing: "-0.035em"
-  headline:
-    fontFamily: "Aptos, Segoe UI, system-ui, sans-serif"
-    fontSize: "clamp(2rem, 3vw, 3.2rem)"
+    fontFamily: "Segoe UI, Helvetica Neue, Arial, sans-serif"
+    fontSize: "2rem"
     fontWeight: 700
-    lineHeight: 1
-    letterSpacing: "-0.03em"
+    lineHeight: 1.1
+    letterSpacing: "-0.02em"
+  headline:
+    fontFamily: "Segoe UI, Helvetica Neue, Arial, sans-serif"
+    fontSize: "1.35rem"
+    fontWeight: 700
+    lineHeight: 1.15
+    letterSpacing: "-0.02em"
   body:
-    fontFamily: "Aptos, Segoe UI, system-ui, sans-serif"
-    fontSize: "1.08rem"
+    fontFamily: "Segoe UI, Helvetica Neue, Arial, sans-serif"
+    fontSize: "1rem"
     fontWeight: 400
-    lineHeight: 1.6
+    lineHeight: 1.55
   label:
-    fontFamily: "Aptos, Segoe UI, system-ui, sans-serif"
-    fontSize: "0.82rem"
+    fontFamily: "Segoe UI, Helvetica Neue, Arial, sans-serif"
+    fontSize: "0.8rem"
     fontWeight: 700
     lineHeight: 1.2
-    letterSpacing: "0.02em"
+    letterSpacing: "0.04em"
   mono:
-    fontFamily: "Cascadia Code, SFMono-Regular, Consolas, monospace"
-    fontSize: "0.88rem"
+    fontFamily: "Consolas, Cascadia Code, Courier New, monospace"
+    fontSize: "0.84rem"
     fontWeight: 400
     lineHeight: 1.3
 rounded:
@@ -111,20 +111,20 @@ The palette is restrained and infrastructure-grade: black and blue carry the roo
 
 ## Typography
 
-**Display Font:** Aptos, Segoe UI, system-ui, sans-serif  
-**Body Font:** Aptos, Segoe UI, system-ui, sans-serif  
-**Label/Mono Font:** Cascadia Code, SFMono-Regular, Consolas, monospace
+**Display Font:** Segoe UI, Helvetica Neue, Arial, sans-serif  
+**Body Font:** Segoe UI, Helvetica Neue, Arial, sans-serif  
+**Label/Mono Font:** Consolas, Cascadia Code, Courier New, monospace
 
-**Character:** One family carries the operational UI, while mono is reserved for trace identifiers and machine-facing fragments. The voice is calm, firm, and readable at speed.
+**Character:** The shipped stack is judge-safe and OS-present. Segoe UI carries the operational chrome, while mono is reserved for trace identifiers, hashes, and machine-facing fragments. The voice stays calm, firm, and readable at speed.
 
 ### Hierarchy
-- **Display** (800, `clamp(2.5rem, 5vw, 5.5rem)`, line-height `0.94`): welcome-page headline only. This is the one dramatic typographic move in the product.
-- **Headline** (700, `clamp(2rem, 3vw, 3.2rem)`, line-height `1`): route-level page titles inside the explorer.
+- **Display** (700, `2rem`, line-height `1.1`): welcome-page purpose line only. The brand mark is the hero signal, not a giant marketing headline.
+- **Headline** (700, `1.35rem`, line-height `1.15`): panel and section headings inside the explorer.
 - **Title** (700, `1.4rem`, line-height `1.2`): panel and section headings.
-- **Body** (400, `1.08rem`, line-height `1.6`): explanatory copy and interface prose. Keep paragraph width under roughly 60ch.
-- **Label** (700, `0.82rem`, letter-spacing `0.02em`): eyebrows, chips, metadata labels, and control captions.
+- **Body** (400, `1rem`, line-height `1.55`): explanatory copy and interface prose. Keep paragraph width under roughly 60ch.
+- **Label** (700, `0.8rem`, letter-spacing `0.04em`): eyebrows, chips, metadata labels, and control captions.
 
-**The One Voice Rule.** Display type is earned once, on welcome. Every other surface stays in product-ui cadence.
+**The One Voice Rule.** The official enterprise mark is the welcome hero. Display type only supports it; every other surface stays in product-ui cadence.
 
 ## Elevation
 
@@ -156,8 +156,16 @@ Depth is conveyed through tonal layering first and shadow second. Panels float o
 
 ### Navigation
 - **Style:** one welcome route plus one explorer route. The navigation model is direct-path, not multi-page.
-- **Trace Navigation:** `?trace_id=` powers detail selection; do not introduce dynamic `[id]` routes into the exported app.
+- **Trace Navigation:** `/explorer/` is the exported route and `?trace_id=` powers detail selection; do not introduce dynamic `[id]` routes into the exported app.
 - **Tenant Context:** in fixture mode the tenant switcher can move between both demo tenants; in live mode the UI should acknowledge that the signed-in Cognito ID token is the real source of tenant truth.
+
+## Intentional Deltas From The Scratchbook Sample
+
+- The official enterprise mark is shipped from the scratchbook asset and used on welcome plus explorer chrome.
+- Scratchbook tabs such as `REQUEST`, `RESPONSE`, `TOKENS`, and `METADATA` are intentionally omitted. The judge path stays list → waterfall → RAG hops → governance → audit.
+- The explorer summary is one dense operating band, not a KPI-card wall.
+- The `VAULT` lockup stays high-contrast against black. Contrast wins over low-contrast blue-on-black branding.
+- Decorative body gradients are intentionally removed. The shipped surface is blackplane-first so signal stays on the flight.
 
 ## Do's and Don'ts
 
