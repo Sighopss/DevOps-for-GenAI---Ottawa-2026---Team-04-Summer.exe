@@ -6,7 +6,7 @@ Python client that **emits** TraceVault spans. One request = one flight = one `t
 
 ```bash
 cd sdk
-uv sync --extra dev
+uv sync
 ```
 
 ## Usage

@@ -4,7 +4,7 @@
 - Human: Trevor
 - Agent id: trevor-sdk
 - Branch: trevor/sdk/client
-- PR: TBD
+- PR: https://github.com/Sighopss/DevOps-for-GenAI---Ottawa-2026---Team-04-Summer.exe/pull/28
 - Mission file: `skills/trevor-recorder/agents/sdk.md`
 
 ## Claimed paths (collision)
@@ -46,7 +46,7 @@ assets/
 
 ## What I shipped
 
-- files: `sdk/pyproject.toml`, `sdk/README.md`, `sdk/src/tracevault/{__init__,client,span,context,schema,redact_hint}.py`, `sdk/tests/{test_golden_span,test_nesting,test_no_raw_log}.py`, `sdk/tests/golden/root_span.json`, `sdk/.gitignore`, `sdk/uv.lock`
+- files: `sdk/pyproject.toml`, `sdk/README.md`, `sdk/src/tracevault/{__init__,client,span,context,schema,redact_hint}.py`, `sdk/tests/{test_golden_span,test_nesting,test_no_raw_log}.py`, `sdk/tests/golden/root_span.json`, `sdk/.gitignore`, `sdk/.bandit`, `sdk/uv.lock`
 - outputs / env **names** (no secret values): `TRACEVAULT_INGEST_URL`, `TRACEVAULT_TENANT_KEY`, `TRACEVAULT_TENANT_ID`
 - tests: `uv run pytest` in `sdk/` — 3 passed
 

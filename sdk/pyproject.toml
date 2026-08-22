@@ -10,8 +10,8 @@ dependencies = [
     "opentelemetry-api",
 ]
 
-[project.optional-dependencies]
-dev = ["pytest"]
+[dependency-groups]
+dev = ["pytest", "bandit"]
 
 [build-system]
 requires = ["setuptools>=68"]
