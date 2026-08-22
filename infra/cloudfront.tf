@@ -115,19 +115,31 @@ resource "aws_cloudfront_distribution" "web" {
     compress                   = true
     cache_policy_id            = aws_cloudfront_cache_policy.spa_query.id
     response_headers_policy_id = aws_cloudfront_response_headers_policy.web.id
+
+    function_association {
+      event_type   = "viewer-request"
+      function_arn = aws_cloudfront_function.uri_rewrite.arn
+    }
   }
 
+  # 403 rather than 404 is what S3 returns for a missing key when the OAC
+  # policy grants GetObject but not ListBucket. Serving it as a real 404 keeps
+  # a missing object honest instead of reporting 200.
   custom_error_response {
     error_code            = 403
-    response_code         = 200
-    response_page_path    = "/index.html"
+    response_code         = 404
+    response_page_path    = "/404.html"
     error_caching_min_ttl = 0
   }
 
+  # Previously 404 -> /index.html at 200. That mapping hid issue #131 for a
+  # full day: every broken path answered 200, so no status-code check could
+  # fail. It would also have let a missing health.json report healthy while
+  # serving HTML, and GET /health proxies to that object.
   custom_error_response {
     error_code            = 404
-    response_code         = 200
-    response_page_path    = "/index.html"
+    response_code         = 404
+    response_page_path    = "/404.html"
     error_caching_min_ttl = 0
   }
 
@@ -141,4 +153,42 @@ resource "aws_cloudfront_distribution" "web" {
     cloudfront_default_certificate = true
     minimum_protocol_version       = "TLSv1.2_2021"
   }
+}
+
+# Clean URLs on S3 + CloudFront.
+#
+# The Next.js export is flat: `/explorer` is stored as the key `explorer.html`,
+# not `explorer`. S3 serves keys literally, so a request for /explorer missed,
+# fell through custom_error_response, and returned the WELCOME page at 200 --
+# the Explorer was unreachable by clicking (issue #131). Every path returning
+# 200 also meant no smoke test could catch it (issue #132).
+#
+# ES5 only: the CloudFront Functions runtime has no String.includes/endsWith.
+# Paths that already carry an extension are left alone, which is what keeps
+# /health.json -- a never-kill -- untouched.
+resource "aws_cloudfront_function" "uri_rewrite" {
+  name    = "${local.name}-uri-rewrite"
+  runtime = "cloudfront-js-2.0"
+  comment = "Map /path -> /path.html and /dir/ -> /dir/index.html for the static export"
+  publish = true
+
+  code = <<-EOT
+    function handler(event) {
+        var request = event.request;
+        var uri = request.uri;
+
+        if (uri === '/') {
+            request.uri = '/index.html';
+        } else if (uri.charAt(uri.length - 1) === '/') {
+            // Flat export: /explorer/ is stored as explorer.html, not
+            // explorer/index.html. Stale bundles link with the trailing
+            // slash, so strip it rather than 404 on them.
+            request.uri = uri.slice(0, uri.length - 1) + '.html';
+        } else if (uri.lastIndexOf('.') <= uri.lastIndexOf('/')) {
+            request.uri = uri + '.html';
+        }
+
+        return request;
+    }
+  EOT
 }

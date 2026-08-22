@@ -99,8 +99,35 @@ resource "aws_apigatewayv2_stage" "default" {
   auto_deploy = true
 
   default_route_settings {
-    throttling_burst_limit = var.api_throttle_burst
-    throttling_rate_limit  = var.api_throttle_rate
+    throttling_burst_limit   = var.api_throttle_burst
+    throttling_rate_limit    = var.api_throttle_rate
+    detailed_metrics_enabled = true
+  }
+
+  # Access logging. Without this there was no record of what hit the API at
+  # all: a refused cross-tenant read (403) and a throttled request (429) both
+  # left zero trace, and requests rejected by the JWT authorizer never reach a
+  # Lambda, so they were invisible everywhere (issue #126).
+  #
+  # Deliberately absent from this format: Authorization, X-Tenant-Key, and any
+  # request body. The tenant claim is recorded because it is the tenant id, not
+  # a credential -- it is what makes an audit line answer "who".
+  access_log_settings {
+    destination_arn = aws_cloudwatch_log_group.api_access.arn
+    format = jsonencode({
+      requestId               = "$context.requestId"
+      ip                      = "$context.identity.sourceIp"
+      requestTime             = "$context.requestTime"
+      httpMethod              = "$context.httpMethod"
+      routeKey                = "$context.routeKey"
+      path                    = "$context.path"
+      status                  = "$context.status"
+      protocol                = "$context.protocol"
+      responseLength          = "$context.responseLength"
+      integrationErrorMessage = "$context.integrationErrorMessage"
+      integrationStatus       = "$context.integrationStatus"
+      tenant                  = "$context.authorizer.claims['custom:tenant_id']"
+    })
   }
 }
 

@@ -2,6 +2,10 @@ env             = "prod"
 aws_region      = "us-east-1"
 api_throttle_rate  = 20
 api_throttle_burst = 40
+# REQUIRED for alerting. Left empty, aws_sns_topic.alarms is never created
+# (count = 0) and the api_5xx alarm gets alarm_actions = [] -- the alarm
+# exists and notifies nobody. Set a real address, apply, then CONFIRM the
+# subscription email; an unconfirmed subscription still notifies nobody.
 alarm_email                    = ""
 lambda_reserved_concurrency    = -1
 github_repository              = "Sighopss/DevOps-for-GenAI---Ottawa-2026---Team-04-Summer.exe"

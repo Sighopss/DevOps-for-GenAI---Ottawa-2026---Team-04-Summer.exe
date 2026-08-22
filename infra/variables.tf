@@ -97,3 +97,14 @@ variable "lambda_memory_mb" {
   description = "Memory for both vault Lambdas."
   default     = 512
 }
+
+variable "retention_days" {
+  type        = number
+  description = <<-EOT
+    Single source of truth for data retention. Drives the DynamoDB TTL the
+    vault code writes into expires_at (VAULT_TTL_DAYS on both Lambdas) and the
+    S3 lifecycle expiry on the payload bucket. These MUST match: a payload
+    object outliving its Dynamo row is data we promised to delete but did not.
+  EOT
+  default     = 7
+}
