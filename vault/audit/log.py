@@ -32,6 +32,7 @@ from datetime import datetime, timezone
 
 from vault.audit.models import AuditEvent
 from vault.store import keys
+from vault.store.paginate import query_all
 
 _DEFAULT_TTL_DAYS = 7
 
@@ -94,7 +95,10 @@ def record(actor: str, tenant_id: str, trace_id: str, table=None) -> AuditEvent:
 
 def list_events(tenant_id: str, trace_id: str, table=None) -> list[AuditEvent]:
     """Events for exactly one (tenant_id, trace_id), oldest first."""
-    response = _table_or_default(table).query(
+    # Read every page: a truncated audit trail is an incomplete record of who
+    # opened a trace — the guarantee this endpoint exists to make.
+    raw = query_all(
+        _table_or_default(table),
         KeyConditionExpression="tenant_id = :t AND begins_with(trace_id, :p)",
         ExpressionAttributeValues={
             ":t": tenant_id,
@@ -104,7 +108,7 @@ def list_events(tenant_id: str, trace_id: str, table=None) -> list[AuditEvent]:
     # Order on the sort key, not on `ts`: the key carries the ns sequence, so
     # it is a total order. Sorting by `ts` leaves same-microsecond events in
     # whatever order the query happened to return them.
-    items = sorted(response.get("Items", []), key=lambda item: str(item["trace_id"]))
+    items = sorted(raw, key=lambda item: str(item["trace_id"]))
     return [
         AuditEvent(
             actor=str(item["actor"]),

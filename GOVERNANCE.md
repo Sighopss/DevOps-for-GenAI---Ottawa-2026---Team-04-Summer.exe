@@ -27,12 +27,12 @@ The material risk is **prompt persistence**. An observability tool sits directly
 | Risk | Impact if realised | Control | Residual |
 |---|---|---|---|
 | Raw prompt or PII persisted | High — regulated data at rest in a system with no data-protection review | Fail-closed redaction at ingest; only `prompt_hash` + masked preview stored | Low by design, **but** dependent on deny-list coverage; Presidio is optional and absent in CI |
-| Cross-tenant read | High — one tenant reads another's prompts | `custom:tenant_id` compared in `vault-read`, 403 not 404 | **Currently unmitigated in code** — not implemented (issue #15) |
+| Cross-tenant read | High — one tenant reads another's prompts | `custom:tenant_id` compared in `vault-read`, 403 not 404 | **Mitigated** — implemented in `vault/read/tenant_guard.py`, tested (`vault/tests/read/test_isolation.py`), and demonstrated against the live deployment 2026-08-22: tenant-b → tenant-a trace returned `403 "tenant mismatch"` with no spans (`docs/RED_TEAM.md` B1) |
 | Ingest key compromise | Medium — attacker appends spans for one tenant; cannot read | Key ≠ user JWT; per-tenant scope; rotation in Secrets Manager | Low; no read capability from a write key |
 | Prompt injection | Low — no privileged action exists to steer toward | Schema-only ingest, text stored inert; one read-only tool | Low |
 | Cost runaway | Low — demo-sized throttle and timeouts | API throttle, Lambda timeout, `maxTokens` 256 | Low, untested (issue #52) |
 
-The honest asymmetry: the control for the highest risk is built and tested; the control for the second-highest is contracted but not yet written.
+Both of the top two controls are now built, tested, and demonstrated in operation (redaction fail-closed and cross-tenant 403 — `docs/RED_TEAM.md`). The remaining honest gaps are infrastructure, not vault behaviour: WAF is associated with nothing (WAFv2 cannot attach to an HTTP API, #97) and the edge TLS floor is TLSv1, so flood bounds rest on the in-Lambda caps plus API Gateway throttling.
 
 ## 3. Data governance
 
@@ -101,7 +101,7 @@ Full inventory, including versions and inference settings, is in [`docs/AI_INVEN
 |---|---|---|
 | **Operational** — is it up | `GET /health` → `200 {"ok":true}`, served without a Lambda | Configured; never yet curled against a live endpoint |
 | **Operational** — is it erroring | CloudWatch alarm, API 5xx ≥ 5 in 5 minutes | Configured in `infra/cloudwatch.tf`; never fired or tested |
-| **Behavioural** — what did the AI do | The flights themselves. This product *is* the telemetry: span graph, RAG hops, tool call, tokens, cost, errors | Emitted by `sdk/`, stored by `vault-ingest`; not yet viewable (no `web/`, no read handler) |
+| **Behavioural** — what did the AI do | The flights themselves. This product *is* the telemetry: span graph, RAG hops, tool call, tokens, cost, errors | Emitted by `sdk/`, stored by `vault-ingest`, readable through `vault-read` (`GET /v1/traces*`, tenant-scoped, audited). The Explorer renders it; its live-data wiring is Michael's remaining piece |
 | **Safety** — is redaction holding | `redaction_failed` count. A non-zero rate means unmaskable content is arriving | Behaviour implemented and tested; no metric or alarm on the counter yet |
 | **Abuse** — is someone probing | `401`/`403` rates; WAF sampled requests | WAF configured; no alarm on auth failures yet |
 | **Cost** | `cost_usd` per span, aggregated per flight | Field carried end to end; **the live Bedrock path currently hardcodes `cost_usd = 0.0`**, so real cost is not computed — gap, owner Trevor |
@@ -129,7 +129,7 @@ Every row names a person. Escalation terminates at Trevor; there is no pager, wh
 |---|---|---|---|
 | **Redaction cannot complete** | Ingest returns `400 redaction_failed` and **stores nothing**. The flight is lost; no partial or unmasked record is written. | Investigate the input class that failed, extend the deny-list, add a regression test. Data loss is the accepted outcome. | Alexis |
 | **Raw PII found at rest** | — | Treat as a breach of the core guarantee. Identify the ingest path that bypassed masking, delete affected objects, add the case to `vault/tests/redact/`, and disclose it rather than quietly patching. | Alexis, escalate to Trevor |
-| **Cross-tenant read observed** | Should be `403`. | Revoke the affected Cognito session, fix the claim comparison in `vault-read`, add the case to the isolation tests. **Note:** this cannot occur today because the read path does not exist; it also means the control is unproven. | Alexis, escalate to Trevor |
+| **Cross-tenant read observed** | Should be `403`. | Revoke the affected Cognito session, fix the claim comparison in `vault-read`, add the case to the isolation tests. **Note:** the control is implemented, tested, and verified live returning `403` (`docs/RED_TEAM.md` B1), so an observed cross-tenant read means a regression — treat it as a P1 and re-run `docs/redteam/redteam.sh`. | Alexis, escalate to Trevor |
 | **Ingest key compromised** | Key is per-tenant and write-only — no read capability. | Rotate the value in Secrets Manager. No redeploy required; the handler reads the secret at invoke. Old key stops authenticating immediately. | Trevor |
 | **Site or API down** | `/health` fails; 5xx alarm fires. | Re-run the last green `deploy.yml`. That is the rollback — one mechanism, no separate script. | Trevor |
 | **Bad deploy** | — | Same: re-run the last green `deploy.yml`. `main`-only deploys mean the last green run is always a known-good state. | Trevor |
@@ -144,9 +144,9 @@ Every row names a person. Escalation terminates at Trevor; there is no pager, wh
 
 This card describes the system as designed and, where noted, as built. Being specific about the difference is itself a governance control:
 
-- **Built and tested:** redaction (fail-closed, 83 vault tests), ingest with tenant-scoped writes, span emission, the one-tool agent, the CI security gates.
-- **Built, not verified:** every cloud control in Terraform. `validate` passes; **no `terraform apply` has ever run**.
-- **Contracted, not built:** the read path, tenant-isolation 403, and the audit trail (issues #15, #16, #18). The Explorer UI (Michael's `web/`).
-- **Not deployed:** all of it. There is no public URL.
+- **Built, tested, and demonstrated live:** redaction (fail-closed, 115 vault tests), ingest with tenant-scoped writes, the read path, tenant-isolation 403, the audit trail, span emission, the one-tool agent, the CI security gates — the vault half verified against the deployed stack on 2026-08-22 (`docs/RED_TEAM.md`).
+- **Built and applied, but not regression-tested:** the cloud controls in Terraform. The stack was applied 2026-08-22; no automated assertion re-checks encryption, IAM scope, or the public-access block as it changes.
+- **Known not in force:** WAF (associated with nothing — WAFv2 cannot attach to an HTTP API, #97) and the TLS 1.2 floor at the edge (default CloudFront certificate).
+- **Deployed:** the API and the Explorer are live. The Explorer's live-data path still needs the API base URL baked into the web build; the fixture view works.
 
 Anything in this document phrased as running behaviour that falls into the last three categories is a requirement, not a claim. [`README.md`](README.md) **Demo integrity (P-15)** holds the authoritative built-versus-deployed table.

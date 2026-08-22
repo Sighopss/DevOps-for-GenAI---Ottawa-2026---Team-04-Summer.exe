@@ -11,6 +11,7 @@ import os
 from decimal import Decimal
 
 from vault.store import keys
+from vault.store.paginate import query_all
 
 
 class ReadStore:
@@ -43,11 +44,15 @@ class ReadStore:
         return response.get("Item")
 
     def list_flight_items(self, tenant_id: str, limit: int) -> list[dict]:
-        response = self._table_or_default().query(
+        # Read every page before sorting: the DynamoDB sort key is the
+        # trace_id (`t#…`), but "newest `limit`" is by start_time, so the
+        # top-N can be spread across pages. A single-page read would return
+        # the wrong newest-N, not merely a truncated one.
+        items = query_all(
+            self._table_or_default(),
             KeyConditionExpression="tenant_id = :t AND begins_with(trace_id, :p)",
             ExpressionAttributeValues={":t": tenant_id, ":p": keys.FLIGHT_SK_PREFIX},
         )
-        items = response.get("Items", [])
         items.sort(key=lambda item: str(item.get("start_time", "")), reverse=True)
         return items[:limit]
 
