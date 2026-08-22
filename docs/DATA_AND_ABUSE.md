@@ -20,6 +20,8 @@ TraceVault is an observability store for AI requests. The core design constraint
 
 **Retention.** DynamoDB TTL 7 days (`expires_at`, on both flight summaries and audit rows). CloudWatch logs 7 days. S3 span payloads become unreachable when their DynamoDB item expires (reads resolve through the item); the objects themselves have no lifecycle rule yet — see accepted risks.
 
+**Redaction engine — decision (issue #84).** The deny-list is the **authoritative** layer: deterministic regex, stdlib-only, shipped in the Lambda, proven against the live store (nothing raw at rest — see `docs/RED_TEAM.md`). Presidio (ML named-entity detection) is a *best-effort* second pass that is **declared absent in production** — it is not installed in CI and not packaged in the Lambda zip; `vault/redact/` imports it lazily inside a `try`, so with it absent redaction runs deny-list-only and every contracted judge-path guarantee still holds, and with it present-but-failing it fails closed (`vault/tests/redact/test_fail_closed.py`). We do **not** claim Presidio is active: no judged behaviour depends on a third-party ML model being available. Full dependency note: `docs/AI_INVENTORY.md`.
+
 ## Abuse cases
 
 Each case names the control **and** the test a judge can run (`python -m pytest vault`).
