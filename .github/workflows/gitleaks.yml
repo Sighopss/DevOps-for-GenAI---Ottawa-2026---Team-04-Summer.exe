@@ -1,0 +1,29 @@
+# Fail-closed secret scan on every PR and on main (P-13).
+# OIDC later — no AWS keys in this file. Never AKIA.
+
+name: gitleaks
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+  pull-requests: read
+
+jobs:
+  gitleaks:
+    name: gitleaks
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4  # TODO: SHA-pin
+        with:
+          fetch-depth: 0
+      - name: Gitleaks (fail closed)
+        uses: gitleaks/gitleaks-action@v3  # TODO: SHA-pin
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # Required only for GitHub Organizations, not personal accounts.
+          GITLEAKS_LICENSE: ${{ secrets.GITLEAKS_LICENSE }}

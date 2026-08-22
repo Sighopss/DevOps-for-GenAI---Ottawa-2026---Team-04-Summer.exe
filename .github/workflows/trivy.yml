@@ -1,0 +1,44 @@
+# Filesystem scan on every PR + CycloneDX artifact (P-14).
+# Do not commit sbom.cdx.json. Never AKIA.
+
+name: trivy
+
+on:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  trivy:
+    name: trivy-fs
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4  # TODO: SHA-pin
+
+      - name: CycloneDX SBOM (P-14)
+        uses: aquasecurity/trivy-action@v0.36.0  # TODO: SHA-pin (post-2026 tag hijack)
+        with:
+          scan-type: fs
+          scan-ref: .
+          format: cyclonedx
+          output: sbom.cdx.json
+          exit-code: "0"
+
+      - name: Upload CycloneDX artifact
+        uses: actions/upload-artifact@v4  # TODO: SHA-pin
+        with:
+          name: sbom-cyclonedx
+          path: sbom.cdx.json
+          if-no-files-found: error
+
+      - name: Trivy filesystem scan
+        uses: aquasecurity/trivy-action@v0.36.0  # TODO: SHA-pin
+        with:
+          scan-type: fs
+          scan-ref: .
+          format: table
+          severity: CRITICAL,HIGH
+          exit-code: "1"
+          skip-setup-trivy: true

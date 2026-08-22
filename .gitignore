@@ -1,0 +1,61 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+.venv/
+venv/
+env/
+*.egg-info/
+.eggs/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+coverage.xml
+htmlcov/
+dist/
+build/
+*.egg
+
+# Terraform
+.terraform/
+*.tfstate
+*.tfstate.*
+*.tfstate.backup
+crash.log
+crash.*.log
+override.tf
+override.tf.json
+*_override.tf
+*_override.tf.json
+.terraformrc
+terraform.rc
+*.tfvars
+*.tfvars.json
+!*.tfvars.example
+!*.tfvars.json.example
+
+# Env / secrets — never commit values
+.env
+.env.*
+!.env.example
+*.pem
+id_rsa
+id_ed25519
+
+# Worktrees + local agent leases (parallel.md)
+.worktrees/
+.agent-leases.json
+
+# SBOM is a CI artifact (P-14). Do not commit — may include path metadata.
+sbom.cdx.json
+
+# Node (web/ when it lands)
+node_modules/
+.pnpm-store/
+
+# OS
+.DS_Store
+Thumbs.db

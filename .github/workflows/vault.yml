@@ -1,0 +1,51 @@
+# Runs Alexis's vault tests. YAML is Trevor-owned. Skip if vault/ missing.
+
+name: vault
+
+on:
+  pull_request:
+    paths:
+      - "vault/**"
+      - "contracts/**"
+      - ".github/workflows/vault.yml"
+  push:
+    branches: [main]
+    paths:
+      - "vault/**"
+      - "contracts/**"
+      - ".github/workflows/vault.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: pytest-bandit
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4  # TODO: SHA-pin
+
+      - name: Gate — skip if vault/ missing
+        id: gate
+        run: |
+          if [ -d vault ]; then
+            echo "present=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "present=false" >> "$GITHUB_OUTPUT"
+            echo "skip: vault/ missing (greenfield)"
+          fi
+
+      - name: Setup Python 3.12
+        if: steps.gate.outputs.present == 'true'
+        uses: actions/setup-python@v5  # TODO: SHA-pin
+        with:
+          python-version: "3.12"
+
+      - name: pytest + bandit -r vault
+        if: steps.gate.outputs.present == 'true'
+        run: |
+          python -m pip install -U pip
+          python -m pip install pytest bandit
+          python -m pytest vault
+          bandit -r vault
