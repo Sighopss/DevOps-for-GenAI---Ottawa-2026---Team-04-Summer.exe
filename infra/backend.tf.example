@@ -1,0 +1,13 @@
+# Remote state — copy to backend.tf after the human bootstrap (issue #5).
+# Do not commit backend.tf, credentials, or the real bucket name if it is secret.
+# This file is an example only. No AKIA, no access keys, no account ids required here.
+
+terraform {
+  backend "s3" {
+    bucket         = "tracevault-tfstate-REPLACE-ACCOUNT"
+    key            = "dev/terraform.tfstate"
+    region         = "us-east-1"
+    dynamodb_table = "tracevault-tf-locks"
+    encrypt        = true
+  }
+}

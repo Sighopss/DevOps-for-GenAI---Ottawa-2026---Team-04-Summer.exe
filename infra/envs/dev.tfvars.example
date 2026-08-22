@@ -1,0 +1,16 @@
+env             = "dev"
+aws_region      = "us-east-1"
+api_throttle_rate  = 10
+api_throttle_burst = 20
+alarm_email     = ""
+github_repository = "Sighopss/DevOps-for-GenAI---Ottawa-2026---Team-04-Summer.exe"
+bedrock_model_ids = [
+  "anthropic.claude-3-5-sonnet-20241022-v2:0",
+  "amazon.nova-lite-v1:0",
+]
+
+# Passwords are NOT in this file. Export before plan/apply:
+#   TF_VAR_tenant_a_password
+#   TF_VAR_tenant_b_password
+# Ingest keys are NOT here. After apply:
+#   aws secretsmanager put-secret-value --secret-id <tenant-a arn> --secret-string ...
