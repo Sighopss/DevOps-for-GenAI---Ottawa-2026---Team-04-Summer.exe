@@ -42,10 +42,24 @@ jobs:
         with:
           python-version: "3.12"
 
-      - name: pytest + bandit -r vault
+      - name: Install vault dependencies
         if: steps.gate.outputs.present == 'true'
         run: |
           python -m pip install -U pip
           python -m pip install pytest bandit
-          python -m pytest vault
-          bandit -r vault
+          if [ -f vault/requirements.txt ]; then
+            python -m pip install -r vault/requirements.txt
+          else
+            echo "no vault/requirements.txt yet - running with test tooling only"
+          fi
+
+      - name: pytest
+        if: steps.gate.outputs.present == 'true'
+        run: python -m pytest vault
+
+      # -x excludes tests: bandit B101 (assert_used) fires on every pytest
+      # assert, which would red a passing suite. Application code under
+      # vault/ is still scanned in full.
+      - name: bandit
+        if: steps.gate.outputs.present == 'true'
+        run: bandit -r vault -x "*/tests/*"
