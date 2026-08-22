@@ -69,7 +69,7 @@ Across the prior work, safe storage of observability data is treated as somethin
 
 TraceVault's contribution is to make two properties structural rather than optional:
 
-- **Write-time redaction, fail-closed.** The raw prompt is masked and hashed before anything is persisted. If redaction cannot complete, ingest returns `400 redaction_failed` and stores **nothing** — the failure mode is data loss, never a leak. **Implemented and tested** (`vault/`, 83 tests).
+- **Write-time redaction, fail-closed.** The raw prompt is masked and hashed before anything is persisted. If redaction cannot complete, ingest returns `400 redaction_failed` and stores **nothing** — the failure mode is data loss, never a leak. **Implemented, tested (`vault/`, 115 tests), and demonstrated against the live deployment** — a planted email/SSN/AWS key came back `[EMAIL]`/`[SSN]`/`[AWS_KEY]` at read *and* at rest, with zero raw hits in S3, DynamoDB, or CloudWatch ([`docs/RED_TEAM.md`](docs/RED_TEAM.md)).
 - **Tenant isolation that returns 403, not 404.** A cross-tenant read is refused as forbidden rather than hidden as missing, so the boundary is observable and testable instead of silently indistinguishable from an empty result. **Implemented, tested and deployed** (`vault/read/tenant_guard.py`, `vault/tests/read/test_isolation.py`); not yet exercised against a live Cognito token — see **Demo integrity (P-15)** below.
 
 Both are frozen in [`contracts/`](contracts/). [`SECURITY.md`](SECURITY.md) maps each to the test that proves it, or states that it is not covered.
@@ -181,9 +181,35 @@ Demo data is **synthetic** PII only. The privacy properties this product is buil
 
 Which humans used which AI tools, and what the product itself calls: [`AI_USAGE.md`](AI_USAGE.md) (P-06).
 
+## Technology inventory
+
+What we run and why. The AI *model* inventory (Bedrock ids, embeddings, inference settings) is separate and authoritative in [`docs/AI_INVENTORY.md`](docs/AI_INVENTORY.md); this table is the surrounding technology.
+
+### Vault — storage and redaction (Alexis)
+
+| Component | Choice | Why this one |
+|---|---|---|
+| Vault runtime | Python 3.12 on AWS Lambda — two functions only (`vault-ingest`, `vault-read`) | Two entry points map to the two trust levels: an ingest key that can only write, and a Cognito ID token that can only read its own tenant. Fewer functions means fewer IAM roles to reason about. |
+| Redaction (authoritative) | Deny-list in `vault/redact/` — email, SSN (three formats), AWS `AKIA`/`ASIA` keys, `sk-` secrets | Deterministic, stdlib-only regex with no model to download or fail. The judge-path guarantee cannot depend on an ML service being reachable at request time. Fails closed: unmaskable input returns `400 redaction_failed` and stores nothing. |
+| Redaction (optional) | Presidio — **declared absent in production** (#84) | Lazily imported and not packaged in the Lambda; if present it is a best-effort second pass, and it fails closed if it errors mid-analysis. No guarantee depends on it. See [`docs/DATA_AND_ABUSE.md`](docs/DATA_AND_ABUSE.md). |
+| At-rest payloads | S3, SSE-KMS (customer-managed key, rotation on), keys `{tenant_id}/{trace_id}/` | The tenant prefix is enforced twice — by the key layout and by an IAM policy that only permits `PutObject` under it — so a bug in one layer is not sufficient to cross tenants. |
+| At-rest index | DynamoDB, PK `tenant_id` / SK `t#{trace_id}`, TTL `expires_at` 7 days | Tenant is the partition key, so a cross-tenant read is not a filter that can be forgotten — it is a different partition. Audit rows share the table under `a#{trace_id}#…`, inheriting the same encryption and TTL. |
+| Secrets | AWS Secrets Manager, one secret per tenant | Ingest keys are rotatable without a deploy; a constant-time compare resolves the header, and unreadable or placeholder secrets authenticate nobody. |
+| Vault tests | `pytest` (115) + `bandit`, no AWS in unit tests | boto3 is imported lazily and tests inject boto3-shaped fakes, so the suite runs on a bare `pip install pytest bandit` — which is exactly what CI has. |
+
+*Trevor owns the remaining rows of this section (Python/uv SDK + demo-app, Next.js 15 Explorer, Terraform, AWS edge/API services, GitHub Actions + OIDC, pinned versions, SBOM and `trivy` posture) and the assembly of this section — see #55.*
+
 ## Limitations
 
 Deliberately not built in 48h: custom domain, multi-region, PITR, CloudTrail, GuardDuty, VPC-attached Lambdas, MFA on the judge users, billing dashboards, a pager, and any SOC2 documentation. Judge users are demo tenants, not real customers, and this is not a fleet-KPI dashboard.
+
+### Vault — known limits and where they go next
+
+- **Redaction is a deny-list, and a deny-list is a known set.** It masks the entities we contracted for — email, SSN, AWS keys, `sk-` secrets — verified against the live store with zero raw hits ([`docs/RED_TEAM.md`](docs/RED_TEAM.md)). It does not claim to catch a person's name or a novel identifier format. *Next:* ship Presidio in the Lambda for named-entity coverage as a second pass, keeping the deny-list authoritative so the guarantee never depends on a model.
+- **Reads paginate, and are bounded at 50 flights.** `GET /v1/traces` walks every DynamoDB page before sorting, so a tenant's list and a trace's audit trail are complete rather than silently truncated at the first ~1 MB page (#99). The response is then capped at 50 by contract. *Next:* a cursor on the list endpoint so an operator can page past the newest 50.
+- **No per-tenant ingest rate limit.** Flood damage is bounded by the in-Lambda caps — batch ≤100 spans, 1 MB body, 10k-char field, depth-32 nesting — plus API Gateway throttling and the 7-day TTL. The WAF ACL is not in force (WAFv2 cannot attach to an HTTP API — #100). *Next:* per-key usage plans, and the ACL attached to CloudFront.
+- **Retention is a flat 7 days for every tenant.** TTL is set per item at ingest, so a per-tenant policy is a configuration change rather than a redesign. *Next:* retention as a tenant attribute, plus an S3 lifecycle rule matching the DynamoDB TTL (today an expired flight's payload is unreachable, because reads resolve through the index item, but the object itself is not yet expired).
+- **Audit records reads, not exports.** Every trace open writes an actor/tenant/trace/timestamp row. There is no separate event for "an operator copied this off-screen" — that is outside what an API can observe.
 
 ## License
 
