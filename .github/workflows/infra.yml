@@ -73,8 +73,20 @@ jobs:
       - name: terraform plan
         if: steps.gate.outputs.present == 'true' && env.AWS_ROLE_ARN != ''
         working-directory: infra
-        run: terraform plan -input=false -no-color
+        env:
+          TF_VAR_tenant_a_password: ${{ secrets.TF_VAR_TENANT_A_PASSWORD }}
+          TF_VAR_tenant_b_password: ${{ secrets.TF_VAR_TENANT_B_PASSWORD }}
+        run: |
+          # Plan needs the Cognito password vars even when secrets are empty.
+          # Placeholders never land via this job — apply is deploy.yml only.
+          if [ -z "${TF_VAR_tenant_a_password}" ]; then
+            export TF_VAR_tenant_a_password='CiPlanOnly-Aa1!'
+          fi
+          if [ -z "${TF_VAR_tenant_b_password}" ]; then
+            export TF_VAR_tenant_b_password='CiPlanOnly-Bb1!'
+          fi
+          terraform plan -input=false -no-color
 
       - name: Skip plan (no AWS_ROLE_ARN)
         if: steps.gate.outputs.present == 'true' && env.AWS_ROLE_ARN == ''
-        run: echo "skip terraform plan (AWS_ROLE_ARN not set â€” OIDC placeholder)"
+        run: echo "skip terraform plan (AWS_ROLE_ARN not set — OIDC placeholder)"
