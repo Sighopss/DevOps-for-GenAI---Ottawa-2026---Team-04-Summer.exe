@@ -4,6 +4,14 @@
 *.tfstate.*
 crash.log
 crash.*.log
+# Saved plan files. `terraform plan -out=tfplan` writes a zip that embeds
+# tfstate and tfstate-prev — account id, IAM ARNs, bucket names, and every
+# resource attribute. *.tfstate does not match it. Never commit one.
+tfplan
+tfplan.*
+*.tfplan
+*.tfplan.json
+
 # Remote state config — holds the real bucket name and account id.
 # Copy backend.tf.example to backend.tf locally; never commit it.
 backend.tf

@@ -24,6 +24,14 @@ build/
 *.tfstate
 *.tfstate.*
 *.tfstate.backup
+
+# Saved plan files. A `terraform plan -out=...` archive embeds tfstate and
+# tfstate-prev: account id, IAM ARNs, bucket names, every resource
+# attribute. *.tfstate does not match it. Never commit one.
+tfplan
+tfplan.*
+*.tfplan
+*.tfplan.json
 crash.log
 crash.*.log
 override.tf
