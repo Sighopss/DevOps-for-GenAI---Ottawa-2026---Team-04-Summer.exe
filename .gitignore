@@ -60,6 +60,9 @@ id_ed25519
 # SBOM is a CI artifact (P-14). Do not commit — may include path metadata.
 sbom.cdx.json
 
+# SDK local fallback when ingest is unset/unreachable (#49). Not the product.
+sdk/.last-flight.json
+
 # Node (web/ when it lands)
 node_modules/
 .pnpm-store/
