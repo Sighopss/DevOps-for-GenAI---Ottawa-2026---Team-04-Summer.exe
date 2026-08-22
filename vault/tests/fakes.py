@@ -20,6 +20,13 @@ class FakeS3Client:
         self.objects[kwargs["Key"]] = kwargs["Body"]
         return {}
 
+    def get_object(self, Bucket, Key):
+        import io
+
+        if self.fail:
+            raise RuntimeError("s3 unavailable")
+        return {"Body": io.BytesIO(self.objects[Key])}
+
     def stored_json(self, key: str) -> dict:
         return json.loads(self.objects[key].decode("utf-8"))
 
