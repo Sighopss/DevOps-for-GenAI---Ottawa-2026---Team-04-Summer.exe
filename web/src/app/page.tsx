@@ -1,71 +1,48 @@
 "use client";
 
+import Image from "next/image";
 import Link from "next/link";
-import { useEffect, useState } from "react";
-import {
-  buildHostedUiUrl,
-  completeHostedUiSignIn,
-  hasHostedUiConfig,
-} from "@/lib/cognito";
+import { buildHostedUiUrl, hasHostedUiConfig } from "@/lib/cognito";
+
+const EXPLORER_PATH = "/explorer/";
 
 function TraceVaultMark() {
   return (
-    <div className="tv-mark" aria-label="TraceVault">
-      <span className="tv-mark__vault">TRACEVAULT</span>
-      <span className="tv-mark__sub">Unified AI observability with fail-closed storage.</span>
-    </div>
+    <Image
+      alt="TraceVault enterprise mark"
+      className="brand-mark brand-mark--hero"
+      height={4608}
+      src="/tracevault-enterprise.png"
+      unoptimized
+      width={3072}
+    />
   );
 }
 
 export default function WelcomePage() {
   const hostedUiEnabled = hasHostedUiConfig();
-  const [authError, setAuthError] = useState<string | null>(null);
-
-  useEffect(() => {
-    let cancelled = false;
-
-    async function finishHostedUiSignIn() {
-      try {
-        const completed = await completeHostedUiSignIn();
-        if (completed && !cancelled) {
-          window.location.replace("/explorer");
-        }
-      } catch {
-        if (!cancelled) {
-          setAuthError(
-            "Hosted sign-in failed. The Cognito callback returned, but the code exchange did not complete.",
-          );
-        }
-      }
-    }
-
-    void finishHostedUiSignIn();
-
-    return () => {
-      cancelled = true;
-    };
-  }, []);
 
   const handleSignIn = async () => {
     if (!hostedUiEnabled || typeof window === "undefined") {
       return;
     }
 
-    window.location.assign(await buildHostedUiUrl(window.location.origin));
+    const redirectUri = `${window.location.origin}${EXPLORER_PATH}`;
+    window.location.assign(await buildHostedUiUrl(redirectUri));
   };
 
   return (
     <main className="welcome-shell">
       <section className="welcome-panel">
-        <p className="eyebrow">Explorer / Welcome</p>
+        <p className="eyebrow">Fail-closed ops gate</p>
         <TraceVaultMark />
-        <h1>Replay one AI request without turning observability into a leak path.</h1>
-        <p className="lede">
-          TraceVault reconstructs one flight at a time: spans, RAG hops, token usage,
-          cost, and redaction state for an on-call operator who needs the truth fast.
+        <p className="welcome-purpose">
+          Replay one flight fast: latency, RAG hops, spend, and tenant isolation on one
+          operator screen.
         </p>
-        <p className="limitation">
-          Prompts are stored masked, never raw, and traces expire after seven days.
+        <p className="welcome-limitation">
+          Prompt stored masked. Cross-tenant reads fail closed. Traces expire after
+          seven days.
         </p>
         <div className="cta-row">
           {hostedUiEnabled ? (
@@ -80,19 +57,16 @@ export default function WelcomePage() {
             </button>
           ) : (
             <button className="primary-cta is-disabled" disabled type="button">
-              Sign in with Cognito
+              Hosted sign-in offline
             </button>
           )}
-          <Link className="secondary-cta" href="/explorer">
-            Open Day 1 fixture
+          <Link className="secondary-cta" href={EXPLORER_PATH}>
+            Preview sample flight
           </Link>
         </div>
         {!hostedUiEnabled ? (
-          <p className="helper-copy">
-            Set Trevor&apos;s `NEXT_PUBLIC_COGNITO_*` values to enable hosted sign-in.
-          </p>
+          <p className="helper-copy">Hosted sign-in is unavailable in this build.</p>
         ) : null}
-        {authError ? <p className="helper-copy">{authError}</p> : null}
       </section>
     </main>
   );
