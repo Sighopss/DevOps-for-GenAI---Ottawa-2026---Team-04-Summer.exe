@@ -36,14 +36,8 @@ Two agents, two worktrees, two PRs. Trevor merging `main` is the integrate step.
 
 After merge, the file stays on `main` as history. Do not rewrite another PR’s handoff.
 
-## Pickup (other LLM)
+## Another machine
 
-```
-Read handoffs/README.md and the ownership table in README.md.
-gh pr list --state open
-gh pr view <N>
-Use only What I shipped / outputs. Do not edit Claimed paths.
-Execute my mission only. Do not merge to main — Trevor merges.
-```
+Before you write: read this file, the ownership table in `README.md`, and open PRs (`gh pr list`). Use only **What I shipped** from the relevant handoff. Trevor merges to `main`.
 
-If you need another lane changed: fill a handoff, open/update **their** wait is the PR, **stop**. Do not implement their tree.
+If you need another lane changed: open or update **their** PR and **stop**. Do not implement their tree.
