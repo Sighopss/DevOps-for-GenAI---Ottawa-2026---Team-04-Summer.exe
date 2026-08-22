@@ -66,6 +66,19 @@ variable "tenant_a_password" {
   sensitive   = true
 }
 
+variable "lambda_reserved_concurrency" {
+  type        = number
+  description = "Reserved concurrency per vault Lambda. -1 uses the account's unreserved pool."
+  default     = -1
+
+  validation {
+    condition = (
+      var.lambda_reserved_concurrency == -1 ||
+      (var.lambda_reserved_concurrency >= 1 && floor(var.lambda_reserved_concurrency) == var.lambda_reserved_concurrency)
+    )
+    error_message = "lambda_reserved_concurrency must be -1 or a positive integer."
+  }
+}
 variable "tenant_b_password" {
   type        = string
   description = "Permanent password for Cognito user tenant-b. Set via TF_VAR_tenant_b_password."

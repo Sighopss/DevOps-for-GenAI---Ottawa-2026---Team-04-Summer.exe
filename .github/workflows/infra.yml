@@ -45,6 +45,12 @@ jobs:
         with:
           terraform_version: "1.9.8"
 
+      - name: IAM least-privilege + capacity guards
+        if: steps.gate.outputs.present == 'true'
+        run: |
+          python scripts/check_iam_least_privilege.py infra/iam.tf infra/oidc.tf infra/iam_team.tf
+          python -m unittest discover -s infra/tests -p 'test_*.py'
+
       - name: terraform fmt / init / validate
         if: steps.gate.outputs.present == 'true'
         working-directory: infra

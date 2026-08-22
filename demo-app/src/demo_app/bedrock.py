@@ -15,6 +15,7 @@ from demo_app.rag import Document
 
 CONNECT_TIMEOUT_S = 5
 READ_TIMEOUT_S = 30
+MAX_OUTPUT_TOKENS = 256
 FAKE_EMBED_DIM = 64
 FAKE_INPUT_TOKENS = 1
 FAKE_OUTPUT_TOKENS = 1
@@ -65,7 +66,7 @@ def converse(*, question: str, context: str) -> ConverseResult:
                 "content": [{"text": f"{question}\n\nAnswer from this corpus only:\n{context}"}],
             }
         ],
-        inferenceConfig={"maxTokens": 256, "temperature": 0},
+        inferenceConfig={"maxTokens": MAX_OUTPUT_TOKENS, "temperature": 0},
     )
     text = _converse_text(response)
     usage = response.get("usage") or {}

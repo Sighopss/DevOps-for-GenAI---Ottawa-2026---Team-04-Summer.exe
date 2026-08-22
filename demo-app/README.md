@@ -2,6 +2,10 @@
 
 Instrumented RAG/agent that emits **one TraceVault flight**. Not a product. Judges never use this except via `scripts/demo_pii_flight.sh` (trevor-scripts). **One tool only:** `get_doc_metadata` (retrieve). No write, delete, or shell tools.
 
+## Agent/tool security evidence
+
+The callable registry is immutable and contains exactly `get_doc_metadata`. The tool returns metadata only, rejects paths that resolve outside `demo-app/corpus/`, and has no write, delete, shell, or network capability. The workflow has no agent loop: one flight makes exactly one Converse call, capped at 256 output tokens, a 5-second connect timeout, a 30-second read timeout, and one retry. `tests/test_agent_controls.py` makes these properties fail CI if they drift. See [`../docs/SCALE.md`](../docs/SCALE.md) for the 10× and limit-behavior evidence.
+
 ## Fake Bedrock (P-15)
 
 If `TRACEVAULT_FAKE_BEDROCK=1`, embeddings and `converse` are **stubs**. No AWS network. Tests use this path. Say so if a judge demo is run with the flag set — that is not live Bedrock.

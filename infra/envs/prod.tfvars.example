@@ -2,8 +2,9 @@ env             = "prod"
 aws_region      = "us-east-1"
 api_throttle_rate  = 20
 api_throttle_burst = 40
-alarm_email     = ""
-github_repository = "Sighopss/DevOps-for-GenAI---Ottawa-2026---Team-04-Summer.exe"
+alarm_email                    = ""
+lambda_reserved_concurrency    = -1
+github_repository              = "Sighopss/DevOps-for-GenAI---Ottawa-2026---Team-04-Summer.exe"
 bedrock_model_ids = [
   "anthropic.claude-3-5-sonnet-20241022-v2:0",
   "amazon.nova-lite-v1:0",

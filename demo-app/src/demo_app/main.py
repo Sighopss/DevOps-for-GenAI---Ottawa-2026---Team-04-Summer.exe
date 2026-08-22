@@ -10,11 +10,12 @@ from typing import Any
 
 from demo_app.bedrock import attach_embeddings, converse, embed_texts, fake_bedrock_enabled
 from demo_app.emitter import load_emitter
-from demo_app.rag import RETRIEVE_TOP_K, TOOL_NAME, get_doc_metadata, load_documents, retrieve_topk
+from demo_app.rag import RETRIEVE_TOP_K, TOOL_NAME, TOOL_REGISTRY, load_documents, retrieve_topk
 
 log = logging.getLogger("demo_app")
 
 PII_PREFIX = "Contact user@example.com SSN 123-45-6789. "
+MAX_AGENT_ITERATIONS = 1
 _TENANTS = ("tenant-a", "tenant-b")
 
 
@@ -51,7 +52,7 @@ def run(*, question: str, tenant_id: str, pii: bool) -> tuple[str, list[dict[str
                     "tool.document_id": top.doc_id,
                 },
             ):
-                get_doc_metadata(docs, top.doc_id)
+                TOOL_REGISTRY[TOOL_NAME](docs, top.doc_id)
             context = "\n\n".join(doc.text for doc in hits)
             model = os.environ.get("BEDROCK_MODEL_ID", "").strip() or (
                 "fake-bedrock" if fake_bedrock_enabled() else ""
