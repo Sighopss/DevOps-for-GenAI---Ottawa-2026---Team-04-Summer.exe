@@ -1,6 +1,8 @@
 """list_events(): ordering, scoping, and isolation from flights and tenants."""
 
-from vault.audit import list_events, record
+from types import SimpleNamespace
+
+from vault.audit import list_events, log, record
 from vault.store import keys
 from vault.tests.fakes import FakeTable
 
@@ -55,3 +57,28 @@ def test_flight_items_never_appear_as_audit_events(store_env):
 
 def test_empty_when_no_events(store_env):
     assert list_events("tenant-a", TRACE_A, table=FakeTable()) == []
+
+
+def test_same_microsecond_events_keep_write_order(store_env, monkeypatch):
+    """Two events inside one clock tick still list oldest-first.
+
+    The wall clock behind `ts` is microsecond-resolution at best — on Windows
+    it repeats the same value for ~15ms — so back-to-back audit writes share a
+    `ts` routinely, and the audit GET does exactly that (record, then list).
+    Pinning the clock reproduces it on every platform; pinning the entropy
+    suffix so the second row sorts first makes the failure deterministic
+    rather than a coin flip.
+    """
+    monkeypatch.setattr(log.time, "time_ns", lambda: 1_800_000_000_123_456_000)
+    suffixes = iter(["ffffffff", "00000000"])
+    monkeypatch.setattr(
+        log.uuid, "uuid4", lambda: SimpleNamespace(hex=next(suffixes))
+    )
+
+    table = FakeTable()
+    first = record("user-1", "tenant-a", TRACE_A, table=table)
+    second = record("user-2", "tenant-a", TRACE_A, table=table)
+    assert first.ts == second.ts  # the tick really did not advance
+
+    events = list_events("tenant-a", TRACE_A, table=table)
+    assert [event.actor for event in events] == ["user-1", "user-2"]
