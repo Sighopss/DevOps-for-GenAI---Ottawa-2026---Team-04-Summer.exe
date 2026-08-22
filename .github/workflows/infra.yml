@@ -1,0 +1,74 @@
+# Terraform fmt / init / validate on infra/**. Plan only when AWS_ROLE_ARN is set.
+# OIDC — no AKIA in this file.
+
+name: infra
+
+on:
+  pull_request:
+    paths:
+      - "infra/**"
+      - ".github/workflows/infra.yml"
+  push:
+    branches: [main]
+    paths:
+      - "infra/**"
+      - ".github/workflows/infra.yml"
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  terraform:
+    name: fmt-validate-plan
+    runs-on: ubuntu-latest
+    env:
+      AWS_ROLE_ARN: ${{ secrets.AWS_ROLE_ARN }}
+      AWS_REGION: us-east-1
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4  # TODO: SHA-pin
+
+      - name: Gate — skip if infra/ missing
+        id: gate
+        run: |
+          if [ -d infra ]; then
+            echo "present=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "present=false" >> "$GITHUB_OUTPUT"
+            echo "skip: infra/ missing (greenfield)"
+          fi
+
+      - name: Setup Terraform 1.9
+        if: steps.gate.outputs.present == 'true'
+        uses: hashicorp/setup-terraform@v3  # TODO: SHA-pin
+        with:
+          terraform_version: "1.9.8"
+
+      - name: terraform fmt / init / validate
+        if: steps.gate.outputs.present == 'true'
+        working-directory: infra
+        run: |
+          terraform fmt -check -recursive
+          if grep -Rqs 'backend "' --include='*.tf' .; then
+            terraform init
+          else
+            terraform init -backend=false
+          fi
+          terraform validate
+
+      - name: Configure AWS credentials (OIDC)
+        if: steps.gate.outputs.present == 'true' && env.AWS_ROLE_ARN != ''
+        uses: aws-actions/configure-aws-credentials@v4  # TODO: SHA-pin
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+          aws-region: us-east-1
+
+      - name: terraform plan
+        if: steps.gate.outputs.present == 'true' && env.AWS_ROLE_ARN != ''
+        working-directory: infra
+        run: terraform plan -input=false -no-color
+
+      - name: Skip plan (no AWS_ROLE_ARN)
+        if: steps.gate.outputs.present == 'true' && env.AWS_ROLE_ARN == ''
+        run: echo "skip terraform plan (AWS_ROLE_ARN not set — OIDC placeholder)"

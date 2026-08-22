@@ -1,0 +1,148 @@
+# Deploy from main only. OIDC (never AKIA). Skip apply if infra/ is missing.
+# Rollback = re-run the last green run of this workflow (see Makefile help).
+
+name: deploy
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  gate:
+    name: detect-trees
+    runs-on: ubuntu-latest
+    outputs:
+      infra: ${{ steps.detect.outputs.infra }}
+      web: ${{ steps.detect.outputs.web }}
+      role: ${{ steps.detect.outputs.role }}
+    env:
+      AWS_ROLE_ARN: ${{ secrets.AWS_ROLE_ARN }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4  # TODO: SHA-pin
+      - name: Detect infra/ web/ OIDC role
+        id: detect
+        run: |
+          if [ -d infra ]; then echo "infra=true" >> "$GITHUB_OUTPUT"; else echo "infra=false" >> "$GITHUB_OUTPUT"; fi
+          if [ -d web ]; then echo "web=true" >> "$GITHUB_OUTPUT"; else echo "web=false" >> "$GITHUB_OUTPUT"; fi
+          if [ -n "$AWS_ROLE_ARN" ]; then echo "role=true" >> "$GITHUB_OUTPUT"; else echo "role=false" >> "$GITHUB_OUTPUT"; fi
+
+  apply-dev:
+    name: terraform-apply-dev
+    needs: gate
+    runs-on: ubuntu-latest
+    environment: dev
+    if: needs.gate.outputs.infra == 'true' && needs.gate.outputs.role == 'true'
+    env:
+      AWS_REGION: us-east-1
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4  # TODO: SHA-pin
+      - name: Setup Terraform 1.9
+        uses: hashicorp/setup-terraform@v3  # TODO: SHA-pin
+        with:
+          terraform_version: "1.9.8"
+          terraform_wrapper: false
+      - name: Configure AWS credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@v4  # TODO: SHA-pin
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+          aws-region: us-east-1
+      - name: terraform apply dev
+        working-directory: infra
+        run: |
+          terraform init -input=false
+          terraform apply -input=false -auto-approve -no-color
+
+  apply-prod:
+    name: terraform-apply-prod
+    needs: [gate, apply-dev]
+    runs-on: ubuntu-latest
+    environment: prod
+    if: needs.gate.outputs.infra == 'true' && needs.gate.outputs.role == 'true'
+    env:
+      AWS_REGION: us-east-1
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4  # TODO: SHA-pin
+      - name: Setup Terraform 1.9
+        uses: hashicorp/setup-terraform@v3  # TODO: SHA-pin
+        with:
+          terraform_version: "1.9.8"
+          terraform_wrapper: false
+      - name: Configure AWS credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@v4  # TODO: SHA-pin
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+          aws-region: us-east-1
+      - name: terraform apply prod
+        working-directory: infra
+        run: |
+          terraform init -input=false
+          terraform apply -input=false -auto-approve -no-color
+
+  skip-apply:
+    name: skip-apply-greenfield
+    needs: gate
+    runs-on: ubuntu-latest
+    if: needs.gate.outputs.infra != 'true' || needs.gate.outputs.role != 'true'
+    steps:
+      - name: Skip terraform apply
+        run: |
+          echo "skip: terraform apply"
+          echo "infra present: ${{ needs.gate.outputs.infra }}"
+          echo "AWS_ROLE_ARN present: ${{ needs.gate.outputs.role }}"
+          echo "Rollback (when this workflow is green on main): re-run last successful deploy.yml"
+
+  web:
+    name: web-sync
+    needs: [gate, apply-dev]
+    runs-on: ubuntu-latest
+    if: always() && needs.gate.outputs.web == 'true'
+    env:
+      AWS_ROLE_ARN: ${{ secrets.AWS_ROLE_ARN }}
+      AWS_REGION: us-east-1
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4  # TODO: SHA-pin
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4  # TODO: SHA-pin
+        with:
+          version: 9
+      - name: Setup Node 22
+        uses: actions/setup-node@v4  # TODO: SHA-pin
+        with:
+          node-version: "22"
+      - name: pnpm build
+        working-directory: web
+        run: |
+          pnpm install
+          pnpm build
+      - name: Configure AWS credentials (OIDC)
+        if: env.AWS_ROLE_ARN != ''
+        uses: aws-actions/configure-aws-credentials@v4  # TODO: SHA-pin
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+          aws-region: us-east-1
+      - name: Setup Terraform 1.9
+        if: env.AWS_ROLE_ARN != '' && needs.gate.outputs.infra == 'true'
+        uses: hashicorp/setup-terraform@v3  # TODO: SHA-pin
+        with:
+          terraform_version: "1.9.8"
+          terraform_wrapper: false
+      - name: s3 sync + CloudFront invalidate
+        if: env.AWS_ROLE_ARN != '' && needs.gate.outputs.infra == 'true'
+        working-directory: infra
+        run: |
+          terraform init -input=false
+          BUCKET="$(terraform output -raw web_bucket)"
+          DIST="$(terraform output -raw cloudfront_distribution_id)"
+          aws s3 sync ../web/out "s3://${BUCKET}" --delete
+          aws cloudfront create-invalidation --distribution-id "${DIST}" --paths "/*"
+      - name: Skip sync (no OIDC or infra)
+        if: env.AWS_ROLE_ARN == '' || needs.gate.outputs.infra != 'true'
+        run: echo "skip s3 sync / CloudFront invalidate (need AWS_ROLE_ARN + infra/)"

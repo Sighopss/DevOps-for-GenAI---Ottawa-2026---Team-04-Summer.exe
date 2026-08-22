@@ -1,0 +1,16 @@
+# Path fences match skills/trevor-recorder/ownership.md.
+# GitHub usernames @trevor / @alexis / @michael are not accounts on this
+# repo — reviews route to @Sighopss (owner) so CODEOWNERS stays valid.
+# Schema PRs still need all three humans in the thread. Only Trevor merges.
+
+/contracts/  @Sighopss
+/sdk/        @Sighopss
+/demo-app/   @Sighopss
+/infra/      @Sighopss
+/scripts/    @Sighopss
+/Makefile    @Sighopss
+/.github/    @Sighopss
+/vault/      @Sighopss
+/web/        @Sighopss
+/PRODUCT.md  @Sighopss
+/DESIGN.md   @Sighopss
